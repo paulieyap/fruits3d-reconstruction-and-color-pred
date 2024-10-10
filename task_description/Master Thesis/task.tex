@@ -22,7 +22,7 @@
 
 \apsign{}
 
-\subject{Task Description for M.Sc. thesis of Jeanne Paulie Yap:}
+\subject{Task Description for M.Sc.\ thesis of Jeanne Paulie Yap:}
 \begin{document}
 \begin{letter}{}
 \opening{}
@@ -33,13 +33,13 @@ This thesis focuses on addressing these challenges that robotic systems may face
 
 This thesis will investigate the possibility of estimating both the 3D structure and the RGB colors of crops based on incomplete data. By predicting the shape and color of a plant from partial observations, it is possible to provide detailed crop information without the need for full point cloud data, offering a more efficient and cost-effective solution for agricultural management. The thesis will investigate the use of a Conditional Generative Network for shape completion, leveraging the Denoising Diffusion Probabilistic Model (DDPM). This network can generate a coarse 3D shape of the crop based on partial shape observations, effectively "filling in" the missing parts. By conditioning the model on incomplete data, the system can infer the missing structure and RGB color information, overcoming the limitations posed by occlusions in traditional crop data collection methods.
 
-The thesis will focus on 3D point clouds and partial-view RGB images of crops, starting with sweet pepper plants. Building upon the approach proposed by Nunes et al. [1], who applied DDPM for scene completion using LiDAR data, this thesis will extend their framework to agricultural applications. The study will adapt the DDPM model to predict both the complete 3D shape and the RGB colors of crops from partial observations. To achieve these results, the thesis will involve aligning the 3D point cloud with partial RGB data and training the model on this combined dataset, where specific regions of the point cloud are labeled with corresponding RGB values.
+The thesis will focus on 3D point clouds and partial-view RGB images of crops, starting with sweet pepper plants. Building upon the approach proposed by Nunes et al.~\cite{nunes2024cvpr}, who applied DDPM for scene completion using LiDAR data, this thesis will extend their framework to agricultural applications. The study will adapt the DDPM model to predict both the complete 3D shape and the RGB colors of crops from partial observations. To achieve these results, the thesis will involve aligning the 3D point cloud with partial RGB data and training the model on this combined dataset, where specific regions of the point cloud are labeled with corresponding RGB values.
 
 \textbf{Point Of Departure}
 
 % FIRST STEPS 
 
-Before beginning, it is essential to conduct a thorough literature review and become familiar with the IGG sweet pepper dataset. Magistri et al. [2] offer a comprehensive overview of the dataset, detailing its features and evaluation methods, which will serve as a valuable foundation. The next step will involve building upon the work of Nunes et al.~\cite{nunes2024cvpr}, starting with the task of predicting the 3D shape of sweet pepper point clouds using the Denoising Diffusion Probabilistic Model (DDPM). Currently, the network operates solely on 3D point cloud data. The subsequent goal is to extend this by incorporating color information. This will be achieved by assigning RGB values to the point cloud based on corresponding RGB images and using geometric data from the colored sections via data augmentation techniques. This process will result in a new training set that combines both 3D and RGB information, enabling more comprehensive crop data analysis.
+Before beginning, it is essential to conduct a thorough literature review and become familiar with the IGG sweet pepper dataset. Magistri et al.~\cite{magistri2024arxiv} offer a comprehensive overview of the dataset, detailing its features and evaluation methods, which will serve as a valuable foundation. The next step will involve building upon the work of Nunes et al.~\cite{nunes2024cvpr}, starting with the task of predicting the 3D shape of sweet pepper point clouds using the Denoising Diffusion Probabilistic Model (DDPM). Currently, the network operates solely on 3D point cloud data. The subsequent goal is to extend this by incorporating color information. This will be achieved by assigning RGB values to the point cloud based on corresponding RGB images and using geometric data from the colored sections via data augmentation techniques. This process will result in a new training set that combines both 3D and RGB information, enabling more comprehensive crop data analysis.
 
 ~\\[0.5cm]
 \closing{Kind regards,}
