@@ -4,7 +4,7 @@
 ##################### CHANGE for each student/supervisor #######################
 ################################################################################
 # Name of the master student
-STUDENT="[CHANGE] Mr. John Doe"
+STUDENT="Jeanne Paulie Yap"
 # Title of the thesis
 THESIS="[CHANGE] Blah-based blaherry for real-time blah"
 # Name of cosupervisor who is not cyrill, i.e. Andres, Jens, Olga, Nacho, 
