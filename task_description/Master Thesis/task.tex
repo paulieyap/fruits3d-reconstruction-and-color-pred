@@ -31,15 +31,48 @@ The integration of robotic systems in agriculture presents a promising solution 
 
 This thesis focuses on addressing these challenges that robotic systems may face while collecting data. Due to occlusions and other visual obstructions in the field or greenhouse, it is often impossible for robotic sensors to capture the entire structure of a plant or crop. This limitation impacts the system's ability to provide detailed information on crops, which is essential for effective crop management. 
 
-This thesis will investigate the possibility of estimating both the 3D structure and the RGB colors of crops based on incomplete data. By predicting the shape and color of a plant from partial observations, it is possible to provide detailed crop information without the need for full point cloud data, offering a more efficient and cost-effective solution for agricultural management. The thesis will investigate the use of a Conditional Generative Network for shape completion, leveraging the Denoising Diffusion Probabilistic Model (DDPM). This network can generate a coarse 3D shape of the crop based on partial shape observations, effectively "filling in" the missing parts. By conditioning the model on incomplete data, the system can infer the missing structure and RGB color information, overcoming the limitations posed by occlusions in traditional crop data collection methods.
+This thesis will investigate the task of estimating both 3D structure and the  RGB colors of crops based on incomplete data. 
+By predicting the shape 
+and color of a plant from partial observations, it is possible to provide more detailed 
+crop information without the need for full point cloud data, offering a more efficient 
+and cost-effective solution for agricultural management. The thesis will investigate 
+the use of a Conditional Generative Network for shape completion, leveraging the 
+Denoising Diffusion Probabilistic Model (DDPM). This network can generate new samples from a target data used during training. This thesis will investigate the applicability 
+of such models on generating a 3D shape of a crop based on partial 
+shape observations, effectively "filling in" the missing parts. 
+By conditioning the model on incomplete data, the system would infer 
+the missing structure and RGB color information, overcoming the limitations 
+posed by occlusions in traditional crop data collection methods.
 
-The thesis will focus on 3D point clouds and partial-view RGB images of crops, starting with sweet pepper plants. Building upon the approach proposed by Nunes et al.~\cite{nunes2024cvpr}, who applied DDPM for scene completion using LiDAR data, this thesis will extend their framework to agricultural applications. The study will adapt the DDPM model to predict both the complete 3D shape and the RGB colors of crops from partial observations. To achieve these results, the thesis will involve aligning the 3D point cloud with partial RGB data and training the model on this combined dataset, where specific regions of the point cloud are labeled with corresponding RGB values.
+The thesis will focus on 3D point clouds and partial-view RGB images of crops, s
+tarting with sweet pepper plants. Building upon the approach proposed 
+by Nunes et al.~\cite{nunes2024cvpr}, who applied DDPM for scene completion using 
+LiDAR data, this thesis will extend their framework to agricultural applications. 
+The study will adapt the DDPM model to predict both the complete 3D shape and the 
+RGB colors of crops from partial observations. To achieve these results, the thesis 
+will involve aligning the 3D point cloud with partial RGB data and training the model 
+on this combined dataset, to achieve shape completion of crops.
+
 
 \textbf{Point Of Departure}
 
 % FIRST STEPS 
 
-Before beginning, it is essential to conduct a thorough literature review and become familiar with the IGG sweet pepper dataset. Magistri et al.~\cite{magistri2024arxiv} offer a comprehensive overview of the dataset, detailing its features and evaluation methods, which will serve as a valuable foundation. The next step will involve building upon the work of Nunes et al.~\cite{nunes2024cvpr}, starting with the task of predicting the 3D shape of sweet pepper point clouds using the Denoising Diffusion Probabilistic Model (DDPM). Currently, the network operates solely on 3D point cloud data. The subsequent goal is to extend this by incorporating color information. This will be achieved by assigning RGB values to the point cloud based on corresponding RGB images and using geometric data from the colored sections via data augmentation techniques. This process will result in a new training set that combines both 3D and RGB information, enabling more comprehensive crop data analysis.
+Before beginning, it is essential to conduct a thorough literature review 
+and become familiar with the data that will be used. 
+Magistri et al.~\cite{magistri2024arxiv} proposed a dataset for shape completion 
+for sweet pepper data. This dataset will be the starting point, later extending 
+the method to different fruits. The next step will involve building upon the work of 
+Nunes et al.~\cite{nunes2024cvpr}, starting with the task of predicting the 
+3D shape of sweet pepper point clouds using the Denoising Diffusion Probabilistic 
+Model (DDPM). Currently, the network operates solely on 3D point cloud data. 
+The subsequent goal is to extend this by incorporating color information. 
+This will be achieved by assigning RGB values to the point cloud based on 
+paired point clouds and RGB images. This process will result in a new training set that 
+combines both 3D and RGB information, enabling more comprehensive crop data analysis.
+Finally, the method will be evaluated using the sweet pepper 
+dataset \cite{magistri2024arxiv} and trained on further data from other varieties 
+of fruits, to evaluate the proposed shape completion approach on different fruits.
 
 ~\\[0.5cm]
 \closing{Kind regards,}
