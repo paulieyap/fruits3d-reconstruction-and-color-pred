@@ -1,5 +1,5 @@
 experiment:
-    id: Plants_ClassFree_MoreCkpt
+    id: Plants_ClassFree
 
 ##Data
 data:
@@ -32,7 +32,7 @@ diff:
     s_steps: 1000
 
 chamfer:
-    compute: False
+    compute: True #False 
 
 ##Network
 model:

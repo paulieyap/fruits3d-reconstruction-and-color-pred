@@ -100,7 +100,7 @@ class FruitDataModule(LightningDataModule):
         print('Train samples: ', len(loader))
         '''
         dataset = ShapeCompletionDataset(data_source=self.data_source, split='train')
-        loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
+        loader = DataLoader(dataset, batch_size=1, num_workers=0, collate_fn=FruitCollation())
         print('Train samples: ', len(loader))
         
 
@@ -112,8 +112,9 @@ class FruitDataModule(LightningDataModule):
         loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
         print('Val samples: ', len(loader))
         '''
+        
         dataset = ShapeCompletionDataset(data_source=self.data_source, split='val')#split='val'
-        loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
+        loader = DataLoader(dataset, batch_size=1, num_workers=0, collate_fn=FruitCollation())
         print('Val samples: ', len(loader))
       
         return loader
@@ -166,6 +167,8 @@ def main(config, weights, checkpoint, test):
 
     #Load data and model
     #data = datasets.dataloaders[cfg['data']['dataloader']](cfg)   
+
+
     data = FruitDataModule('/export/data/s7jeyapp/shape_completion_challenge')
     # data = FruitDataModule('/export/data/s7jeyapp/IGG/igg_fruit/SweetPepper')
     
@@ -207,7 +210,6 @@ def main(config, weights, checkpoint, test):
         trainer.test(model, data.test_dataloader())
     else:
         print('TRAINING MODE')
-        # ipdb.set_trace()
         trainer.fit(model, data)
 
 if __name__ == "__main__":

@@ -21,16 +21,16 @@ class ShapeCompletionDataset():
         self.split = split
         self.return_pcd = return_pcd
         self.return_rgbd = return_rgbd
-        
+
         self.fruit_list, self.fruit_id = self.get_file_paths()
 
     def get_file_paths(self):
         fruit_list = []
         fruit_id = []
-        
+
         file_list = os.listdir(os.path.join(self.data_source, self.split))
         
-        file_list_sorted = sorted(file_list, key=lambda x: int(x[1:]))
+        file_list_sorted = sorted(file_list, key=lambda x: int(x[-1:]))
 
  
         for idx, fid in enumerate(file_list_sorted):
@@ -67,7 +67,7 @@ class ShapeCompletionDataset():
     def get_rgbd(self, fid):
         fid_root = self.fruit_list[fid]['path']
 
-
+        ipdb.set_trace()
         rgbd_data = {
             'intrinsic':intrinsic,
             'pcd': o3d.geometry.PointCloud(),
