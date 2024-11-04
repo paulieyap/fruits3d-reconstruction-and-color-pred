@@ -103,7 +103,6 @@ class FruitDataModule(LightningDataModule):
         loader = DataLoader(dataset, batch_size=1, num_workers=0, collate_fn=FruitCollation())
         print('Train samples: ', len(loader))
         
-
         return loader
 
     def val_dataloader(self):
@@ -198,11 +197,12 @@ def main(config, weights, checkpoint, test):
                       callbacks=[lr_monitor, checkpoint_saver],
                       check_val_every_n_epoch=1,
                       num_sanity_val_steps= 1,
-                      limit_val_batches= 1 #0.02
+                      limit_val_batches= 0.02 #1 
                       #gradient_clip_val=0.5,
                       )
 
  # Train!
+    ipdb.set_trace()
     if test:
         print('TESTING MODE')
       
@@ -210,7 +210,8 @@ def main(config, weights, checkpoint, test):
         trainer.test(model, data.test_dataloader())
     else:
         print('TRAINING MODE')
-        trainer.fit(model, data)
+        # trainer.fit(model, data) #for val
+        trainer.fit(model, data.train_dataloader())
 
 if __name__ == "__main__":
     main()

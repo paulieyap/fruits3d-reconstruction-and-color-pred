@@ -67,7 +67,7 @@ class ShapeCompletionDataset():
     def get_rgbd(self, fid):
         fid_root = self.fruit_list[fid]['path']
 
-        ipdb.set_trace()
+
         rgbd_data = {
             'intrinsic':intrinsic,
             'pcd': o3d.geometry.PointCloud(),
@@ -150,13 +150,100 @@ class ShapeCompletionDataset():
     #     points = random_drop_n_cuboids(points)
 
     #     return np.squeeze(points, axis=0)
+    @staticmethod
+    def align_pointcloud_with_rgb(pointcloud_xyz, rgb_points, rgb_colors):
+        # Step 1: Create point cloud from XYZ data
+        pc = o3d.geometry.PointCloud()
+        pc.points = o3d.utility.Vector3dVector(pointcloud_xyz)
+
+        # Step 2: Initialize output with -1 for RGB values
+        num_points = pointcloud_xyz.shape[0]
+        output = np.hstack((pointcloud_xyz, np.full((num_points, 3), -1)))
+
+        # Step 3: Find closest points and assign RGB values
+        rgb_pc = o3d.geometry.PointCloud()
+        rgb_pc.points = o3d.utility.Vector3dVector(rgb_points)
+
+        # Build a KDTree to find nearest neighbors
+        pc_tree = o3d.geometry.KDTreeFlann(rgb_pc)
+
+        for i, point in enumerate(pointcloud_xyz):
+            # Use the KDTree to find the nearest RGB point
+            [_, idx, _] = pc_tree.search_knn_vector_3d(point, 1)
+            nearest_point = np.asarray(rgb_pc.points)[idx[0]]
+
+            # Calculate the distance and assign RGB if close enough
+            if np.linalg.norm(point - nearest_point) < 0.01:  # Threshold distance
+                output[i, 3:] = rgb_colors[idx[0]]
+
+        return output
+
 
     def __len__(self):
         return len(self.fruit_list)
 
+    def __getitem__(self, idx):
+        ipdb.set_trace()
+        print("IDX: ", idx)
+        frameid, fid_root = self.fruit_list[idx]
+        fruit_id = self.fruit_id[idx][0]
+
+        intrinsic_path = os.path.join(fid_root, 'input/intrinsic.json')
+        intrinsic = self.load_K(intrinsic_path)
+        
+        pose_path = os.path.join(fid_root, 'input/poses/', frameid.replace('png', 'txt'))
+        pose = np.loadtxt(pose_path)
+        
+        rgb_path = os.path.join(fid_root, 'input/color/', frameid)
+        rgb = cv2.cvtColor(cv2.imread(rgb_path), cv2.COLOR_BGR2RGB)
+
+        depth_path = os.path.join(fid_root, 'input/depth/', frameid.replace('png', 'npy'))
+        depth = np.load(depth_path)
+
+        mask_path = os.path.join(fid_root, 'input/masks/', frameid)
+        mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+
+        frame_key = frameid.replace('png', '')
+
+        # Create the RGB points and colors for alignment
+        rgb_points = rgb.reshape(-1, 3)  # Flatten the RGB image to get XYZ points
+        rgb_colors = rgb.reshape(-1, 3) / 255.0  # Normalize RGB values for potential processing
+
+        # Generate the point cloud from RGBD data
+        frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
+
+        # Get the XYZ coordinates from the point cloud
+        pointcloud_xyz = np.asarray(frame_pcd.points)
+
+        # Align point cloud with RGB data and get nx6 matrix
+        aligned_output = self.align_pointcloud_with_rgb(pointcloud_xyz, rgb_points, rgb_colors)
+
+        if self.split == 'train':
+            gt_pcd = o3d.io.read_point_cloud(os.path.join(fid_root, 'gt/pcd/fruit.ply'))
+            item = {
+                'groundtruth_pcd': gt_pcd,
+                'rgbd_pcd': frame_pcd
+            }
+        elif self.split == 'test':
+            gt_pcd = o3d.io.read_point_cloud('/export/data/s7jeyapp/shape_completion_challenge/train/lab1/gt/pcd/fruit.ply')
+            item = {
+                'groundtruth_pcd': gt_pcd,
+                'rgbd_pcd': frame_pcd,
+                'fruit_id': fruit_id
+            }
+
+        # Add aligned data
+        item['aligned_data'] = {'nx6_matrix': aligned_output}
+        
+        return item
+
+
+##############################CODE DUMP ##################################
+    '''
+
     def __getitem__(self,idx):
 
-      
+        ipdb.set_trace()
         print("IDX: ", idx)
         frameid,fid_root = self.fruit_list[idx]
         fruit_id = self.fruit_id[idx][0]
@@ -203,11 +290,13 @@ class ShapeCompletionDataset():
                     
                 }
         
-        return item 
+            return item 
         
 
+    '''
 
-        '''
+    ##############################################################################
+    '''
         keys = list(self.fruit_list.keys())
         fid = keys[idx]
 
@@ -232,4 +321,4 @@ class ShapeCompletionDataset():
             # points = trans
 
         return item #groudtruth_pcd. rgbd_pcd, es, rgbd_frames 
-        '''
+    '''
