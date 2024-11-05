@@ -26,6 +26,7 @@ class FruitCollation:
         # "transpose" the  batch(pt, ptn) to batch(pt), batch(ptn)
         pcd_full = []
         pcd_part = []
+        pcd_colored = []
         mean = []
         std = []
         fruit_id = []
@@ -54,18 +55,19 @@ class FruitCollation:
             else:
             '''
                 # Training Phase: Use ground truth and RGBD data
-            bbox = sample['groundtruth_pcd'].get_axis_aligned_bounding_box()
-            cropped = sample['rgbd_pcd'].crop(bbox)
+            # bbox = sample['groundtruth_pcd'].get_axis_aligned_bounding_box()
+            # cropped = sample['rgbd_pcd'].crop(bbox)
 
-            # Check if the cropped point cloud contains any points
-            if len(cropped.points) == 0:
-                # If no points are within the bounding box, retain the original RGBD point cloud
-                part_np = np.asarray(sample['rgbd_pcd'].points)
-            else:
-                # Otherwise, use the cropped point cloud
-                part_np = np.asarray(cropped.points)
+            # # Check if the cropped point cloud contains any points
+            # if len(cropped.points) == 0:
+            #     # If no points are within the bounding box, retain the original RGBD point cloud
+            #     part_np = np.asarray(sample['rgbd_pcd'].points)
+            # else:
+            #     # Otherwise, use the cropped point cloud
+            #     part_np = np.asarray(cropped.points)
 
             gt_np = np.asarray(sample['groundtruth_pcd'].points)
+            part_np = np.asarray(sample['rgbd_pcd'].points)
             fid = sample['fruit_id']
             print("part_np shape: ", part_np.shape)
 
@@ -84,7 +86,6 @@ class FruitCollation:
                 'mean': torch.stack(mean).float(),
                 'std': torch.stack(std).float(),
                 'pcd_part': torch.stack(pcd_part).float(),
-                
                 'fruit_id': fid
             }
 
@@ -196,13 +197,13 @@ def main(config, weights, checkpoint, test):
                       max_epochs= cfg['train']['max_epoch'],
                       callbacks=[lr_monitor, checkpoint_saver],
                       check_val_every_n_epoch=1,
-                      num_sanity_val_steps= 1,
-                      limit_val_batches= 0.02 #1 
+                      num_sanity_val_steps= 0, #skips checking the val before training
+                      limit_val_batches=  1 #0.02 #1 
                       #gradient_clip_val=0.5,
                       )
 
  # Train!
-    ipdb.set_trace()
+    # ipdb.set_trace()
     if test:
         print('TESTING MODE')
       
@@ -211,7 +212,7 @@ def main(config, weights, checkpoint, test):
     else:
         print('TRAINING MODE')
         # trainer.fit(model, data) #for val
-        trainer.fit(model, data.train_dataloader())
+        trainer.fit(model, data)
 
 if __name__ == "__main__":
     main()

@@ -152,6 +152,10 @@ class ShapeCompletionDataset():
     #     return np.squeeze(points, axis=0)
     @staticmethod
     def align_pointcloud_with_rgb(pointcloud_xyz, rgb_points, rgb_colors):
+
+
+
+        
         # Step 1: Create point cloud from XYZ data
         pc = o3d.geometry.PointCloud()
         pc.points = o3d.utility.Vector3dVector(pointcloud_xyz)
@@ -173,9 +177,12 @@ class ShapeCompletionDataset():
             nearest_point = np.asarray(rgb_pc.points)[idx[0]]
 
             # Calculate the distance and assign RGB if close enough
+
             if np.linalg.norm(point - nearest_point) < 0.01:  # Threshold distance
                 output[i, 3:] = rgb_colors[idx[0]]
 
+
+        #print no of colored points
         return output
 
 
@@ -183,7 +190,7 @@ class ShapeCompletionDataset():
         return len(self.fruit_list)
 
     def __getitem__(self, idx):
-        ipdb.set_trace()
+        
         print("IDX: ", idx)
         frameid, fid_root = self.fruit_list[idx]
         fruit_id = self.fruit_id[idx][0]
@@ -205,27 +212,37 @@ class ShapeCompletionDataset():
 
         frame_key = frameid.replace('png', '')
 
+        
         # Create the RGB points and colors for alignment
-        rgb_points = rgb.reshape(-1, 3)  # Flatten the RGB image to get XYZ points
-        rgb_colors = rgb.reshape(-1, 3) / 255.0  # Normalize RGB values for potential processing
+
+        # rgb_points = rgb.reshape(-1, 3)  
+        # rgb_colors = rgb.reshape(-1, 3) / 255.0  # Normalize
 
         # Generate the point cloud from RGBD data
         frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
+        frame_pts = np.array(frame_pcd.points)
+        frame_rgb = np.array(frame_pcd.colors)
+        
 
-        # Get the XYZ coordinates from the point cloud
-        pointcloud_xyz = np.asarray(frame_pcd.points)
-
-        # Align point cloud with RGB data and get nx6 matrix
-        aligned_output = self.align_pointcloud_with_rgb(pointcloud_xyz, rgb_points, rgb_colors)
 
         if self.split == 'train':
             gt_pcd = o3d.io.read_point_cloud(os.path.join(fid_root, 'gt/pcd/fruit.ply'))
+                    # Get the XYZ coordinates from the point cloud
+            pointcloud_xyz = np.asarray(gt_pcd.points)
+
+            # Align point cloud with RGB data and get nx6 matrix
+            aligned_output = self.align_pointcloud_with_rgb(pointcloud_xyz, frame_pts, frame_rgb)
             item = {
                 'groundtruth_pcd': gt_pcd,
                 'rgbd_pcd': frame_pcd
             }
         elif self.split == 'test':
             gt_pcd = o3d.io.read_point_cloud('/export/data/s7jeyapp/shape_completion_challenge/train/lab1/gt/pcd/fruit.ply')
+                    # Get the XYZ coordinates from the point cloud
+            pointcloud_xyz = np.asarray(gt_pcd.points)
+
+            # Align point cloud with RGB data and get nx6 matrix
+            aligned_output = self.align_pointcloud_with_rgb(pointcloud_xyz, frame_pts, frame_rgb)
             item = {
                 'groundtruth_pcd': gt_pcd,
                 'rgbd_pcd': frame_pcd,

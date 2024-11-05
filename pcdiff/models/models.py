@@ -167,13 +167,14 @@ class DiffusionPoints(LightningModule):
 
     def points_to_tensor(self, x_feats, mean, std):
         x_feats = ME.utils.batched_coordinates(list(x_feats[:]), dtype=torch.float32, device=self.device)
+        #creates another dimension which is the batch index
 
-        x_coord = x_feats.clone()
-        x_coord[:,1:] = feats_to_coord(x_feats[:,1:], self.hparams['data']['resolution'], mean, std)
-
+        x_coord = x_feats[:,:4].clone() #batch index, x y z
+        x_coord[:,1:] = feats_to_coord(x_feats[:,1:4], self.hparams['data']['resolution'], mean, std)
+        #multiplies everything by ~1000 - 1mm == 1m 
         x_t = ME.TensorField(
-            features=x_feats[:,1:],
-            coordinates=x_coord,
+            features=x_feats[:,1:], #in mm
+            coordinates=x_coord, #meter, voxel coord
             quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
             minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
             device=self.device,
@@ -205,9 +206,12 @@ class DiffusionPoints(LightningModule):
             )
 
         denoise_t = self.forward(x_full, x_full.sparse(), x_part, t)
-        loss = self.p_losses(denoise_t, noise)
+        loss = self.p_losses(denoise_t, noise) #loss_xyz
+        #loss_rgb
         self.log('train/diff_loss', loss)
+        #log all losses individually 
 
+        #loss = loss_xyz + loss_rgb 
         self.log('train/loss', loss)
         torch.cuda.empty_cache()
 
@@ -234,7 +238,9 @@ class DiffusionPoints(LightningModule):
                 torch.zeros_like(batch['pcd_part']), torch.zeros_like(batch['mean']), torch.zeros_like(batch['std'])
             )
 
+
             x_gen_eval = self.p_sample_loop(x_full, x_cond, x_uncond, gt_pts, batch['mean'], batch['std'], batch_idx)
+            #edit to 6 output.... also check
             x_gen_eval = x_gen_eval.F.reshape((gt_pts.shape[0],-1,3))
 
             for i in range(len(batch['pcd_full'])):
@@ -244,11 +250,13 @@ class DiffusionPoints(LightningModule):
 
                 pcd_gt = o3d.geometry.PointCloud()
                 g_pred = unormalize_pcd(batch['pcd_full'], batch['mean'], batch['std'])[i].cpu().detach().numpy()
-                pcd_gt.points = o3d.utility.Vector3dVector(g_pred)
+                pcd_gt.points = o3d.utility.Vector3dVector(g_pred) #later: also create pcd_gt.colors 
+
                 o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}.ply", pcd_pred)
 
                 self.chamfer_distance.update(pcd_gt, pcd_pred)
                 self.precision_recall.update(pcd_gt, pcd_pred)
+                #later: metric for colors
 
         # ipdb.set_trace()
         cd_mean, cd_std = self.chamfer_distance.compute()
