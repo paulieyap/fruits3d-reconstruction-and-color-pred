@@ -181,9 +181,10 @@ class ShapeCompletionDataset():
             if np.linalg.norm(point - nearest_point) < 0.01:  # Threshold distance
                 output[i, 3:] = rgb_colors[idx[0]]
 
-
+        # ipdb.set_trace()
         #print no of colored points
-        return output
+        length = output.shape[0]
+        return output, length
 
 
     def __len__(self):
@@ -231,10 +232,15 @@ class ShapeCompletionDataset():
             pointcloud_xyz = np.asarray(gt_pcd.points)
 
             # Align point cloud with RGB data and get nx6 matrix
-            aligned_output = self.align_pointcloud_with_rgb(pointcloud_xyz, frame_pts, frame_rgb)
+            aligned_output,length_ = self.align_pointcloud_with_rgb(pointcloud_xyz, frame_pts, frame_rgb)
+
             item = {
                 'groundtruth_pcd': gt_pcd,
-                'rgbd_pcd': frame_pcd
+                'rgbd_pcd': frame_pcd,
+                'fruit_id': fruit_id,
+                'aligned_data': aligned_output,
+                'aligned_data_length': length_
+
             }
         elif self.split == 'test':
             gt_pcd = o3d.io.read_point_cloud('/export/data/s7jeyapp/shape_completion_challenge/train/lab1/gt/pcd/fruit.ply')
@@ -242,16 +248,18 @@ class ShapeCompletionDataset():
             pointcloud_xyz = np.asarray(gt_pcd.points)
 
             # Align point cloud with RGB data and get nx6 matrix
-            aligned_output = self.align_pointcloud_with_rgb(pointcloud_xyz, frame_pts, frame_rgb)
+            aligned_output, length_ = self.align_pointcloud_with_rgb(pointcloud_xyz, frame_pts, frame_rgb)
             item = {
                 'groundtruth_pcd': gt_pcd,
                 'rgbd_pcd': frame_pcd,
-                'fruit_id': fruit_id
+                'fruit_id': fruit_id,
+                'aligned_data': aligned_output,
+                'aligned_data_length': length_
             }
 
         # Add aligned data
-        item['aligned_data'] = {'nx6_matrix': aligned_output}
-        
+        # item['aligned_data'] = {'nx6_matrix': aligned_output}
+        # ipdb.set_trace()
         return item
 
 

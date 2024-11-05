@@ -26,7 +26,7 @@ class FruitCollation:
         # "transpose" the  batch(pt, ptn) to batch(pt), batch(ptn)
         pcd_full = []
         pcd_part = []
-        pcd_colored = []
+
         mean = []
         std = []
         fruit_id = []
@@ -69,9 +69,10 @@ class FruitCollation:
             gt_np = np.asarray(sample['groundtruth_pcd'].points)
             part_np = np.asarray(sample['rgbd_pcd'].points)
             fid = sample['fruit_id']
-            print("part_np shape: ", part_np.shape)
+            aligned_data= sample['aligned_data']
+            aligned_data_length = sample['aligned_data_length']
 
-
+   
             # Sparse representation using ground truth and cropped point cloud
             sparse = point_set_to_sparse(gt_np, part_np, 30000, 15000, 0.01)
 
@@ -80,13 +81,16 @@ class FruitCollation:
             pcd_full.append(sparse[0])
             mean.append(sparse[1])
             std.append(sparse[2])
-            
+            ipdb.set_trace()
             return {
                 'pcd_full': torch.stack(pcd_full).float(),
+                'pcd_part': torch.stack(pcd_part).float(),
                 'mean': torch.stack(mean).float(),
                 'std': torch.stack(std).float(),
-                'pcd_part': torch.stack(pcd_part).float(),
-                'fruit_id': fid
+
+                'fruit_id': fid,
+                'aligned_data': aligned_data,
+                'aligned_data_length': aligned_data_length
             }
 
 

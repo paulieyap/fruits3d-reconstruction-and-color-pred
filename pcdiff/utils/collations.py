@@ -37,6 +37,8 @@ def point_set_to_sparse(p_full, p_part, n_full, n_part, resolution): #replace p_
     p_full = normalize_pcd(p_full, p_mean, p_std)
     p_part = normalize_pcd(p_part, p_mean, p_std)
     # ipdb.set_trace()
+
+    
     return [p_full, p_mean, p_std, p_part]
 
 def rgbd_set_to_sparse(rgbd_pcd, n_full, n_part, resolution): #replace p_full with rgbd
