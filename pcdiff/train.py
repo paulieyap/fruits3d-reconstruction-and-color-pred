@@ -81,13 +81,15 @@ class FruitCollation:
             pcd_full.append(sparse[0])
             mean.append(sparse[1])
             std.append(sparse[2])
-            ipdb.set_trace()
+
+            #Do I re-solve the mean and std? 
+
+
             return {
                 'pcd_full': torch.stack(pcd_full).float(),
                 'pcd_part': torch.stack(pcd_part).float(),
                 'mean': torch.stack(mean).float(),
                 'std': torch.stack(std).float(),
-
                 'fruit_id': fid,
                 'aligned_data': aligned_data,
                 'aligned_data_length': aligned_data_length

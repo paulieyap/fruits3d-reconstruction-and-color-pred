@@ -162,10 +162,13 @@ class DiffusionPoints(LightningModule):
         part_feat = self.partial_enc(x_part)
         out = self.model(x_full, x_full_sparse, part_feat, t)
         torch.cuda.empty_cache()
+        
         return out.reshape(t.shape[0],-1,3)
         # return out.reshape(t.shape[0],-1,3)
 
     def points_to_tensor(self, x_feats, mean, std):
+        ipdb.set_trace()
+
         x_feats = ME.utils.batched_coordinates(list(x_feats[:]), dtype=torch.float32, device=self.device)
         #creates another dimension which is the batch index
 
