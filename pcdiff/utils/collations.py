@@ -36,32 +36,59 @@ def point_set_to_sparse(p_full, p_part, n_full, n_part, resolution): #replace p_
 
     p_full = normalize_pcd(p_full, p_mean, p_std)
     p_part = normalize_pcd(p_part, p_mean, p_std)
-    # ipdb.set_trace()
-
+    
     
     return [p_full, p_mean, p_std, p_part]
 
+#based off of points set to sparse
 def rgbd_set_to_sparse(rgbd_pcd, n_full, n_part, resolution): #replace p_full with rgbd
-    concat_full = np.ceil(n_full / rgbd_pcd.shape[0])
-    concat_part = np.ceil(n_part / rgbd_pcd.shape[0])
-    
-    # Shuffle and repeat the full point cloud to match n_full
-    rgbd_full = rgbd_pcd[torch.randperm(rgbd_pcd.shape[0])]
-    rgbd_full = torch.tensor(rgbd_full.repeat(concat_full, 0)[:n_full])
+    """
+    Converts a point cloud to sparse representation, handling XYZRGB in p_full and p_part.
 
-    # Shuffle and repeat the partial point cloud to match n_part
-    rgbd_part = rgbd_pcd[torch.randperm(rgbd_pcd.shape[0])]
-    rgbd_part = torch.tensor(rgbd_part.repeat(concat_part, 0)[:n_part])
+    Parameters:
+    - p_full: Full point cloud (n x 6, XYZRGB)
+    - p_part: Partial point cloud (m x 6, XYZRGB)
+    - n_full: Number of points to sample for p_full
+    - n_part: Number of points to sample for p_part
+    - resolution: Placeholder resolution parameter (not used in this implementation)
 
-    # Calculate mean and standard deviation
-    p_mean, p_std = rgbd_full.mean(axis=0), rgbd_full.std(axis=0)
+    Returns:
+    - A list containing:
+        - p_full (normalized, sampled full point cloud)
+        - p_mean (mean of full point cloud)
+        - p_std (standard deviation of full point cloud)
+        - p_part (normalized, sampled partial point cloud)
+    """
+    # Ensure both inputs have the same number of features (XYZRGB)
+    if p_full.shape[1] != 6 or p_part.shape[1] != 6:
+        raise ValueError("Both p_full and p_part must have 6 features (XYZRGB).")
 
-    # Normalize the point clouds
-    rgbd_full = normalize_pcd(rgbd_full, p_mean, p_std)
-    rgbd_part = normalize_pcd(rgbd_part, p_mean, p_std)
-    
-    return [rgbd_full, p_mean, p_std, rgbd_part]
+    # Shuffle and sample p_full
+    concat_full = int(np.ceil(n_full / p_full.shape[0]))
+    p_full = p_full[torch.randperm(p_full.shape[0])]
+    p_full = torch.tensor(p_full.repeat(concat_full, 0)[:n_full])
 
+    # Shuffle and sample p_part
+    concat_part = int(np.ceil(n_part / p_part.shape[0]))
+    p_part = p_part[torch.randperm(p_part.shape[0])]
+    p_part = torch.tensor(p_part.repeat(concat_part, 0)[:n_part])
+
+    # Split XYZ and RGB for normalization
+    xyz_full = p_full[:, :3]
+    rgb_full = p_full[:, 3:]
+    xyz_part = p_part[:, :3]
+    rgb_part = p_part[:, 3:]
+
+    # Normalize XYZ (mean=0, std=1) and leave RGB as-is
+    xyz_mean, xyz_std = xyz_full.mean(dim=0), xyz_full.std(dim=0)
+    xyz_full_normalized = normalize_pcd(xyz_full, xyz_mean, xyz_std)
+    xyz_part_normalized = normalize_pcd(xyz_part, xyz_mean, xyz_std)
+
+    # Recombine normalized XYZ with original RGB
+    p_full_normalized = torch.cat((xyz_full_normalized, rgb_full), dim=1)
+    p_part_normalized = torch.cat((xyz_part_normalized, rgb_part), dim=1)
+
+    return [p_full_normalized, xyz_mean, xyz_std, p_part_normalized]
 
 
 

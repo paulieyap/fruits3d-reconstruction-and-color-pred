@@ -219,7 +219,7 @@ class ShapeCompletionDataset():
         # rgb_points = rgb.reshape(-1, 3)  
         # rgb_colors = rgb.reshape(-1, 3) / 255.0  # Normalize
 
-        # Generate the point cloud from RGBD data
+        # Frame is the PCD_PART. Generate the point cloud from RGBD data
         frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
         frame_pts = np.array(frame_pcd.points)
         frame_rgb = np.array(frame_pcd.colors)

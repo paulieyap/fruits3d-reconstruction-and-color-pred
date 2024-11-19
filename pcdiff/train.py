@@ -9,6 +9,7 @@ import yaml
 import numpy as np
 import torch
 import ipdb
+import open3d as o3d 
 # import pcdiff.datasets.datasets as datasets
 import pcdiff.models.models as models
 from torch.utils.data import DataLoader
@@ -66,15 +67,23 @@ class FruitCollation:
             #     # Otherwise, use the cropped point cloud
             #     part_np = np.asarray(cropped.points)
 
+            
             gt_np = np.asarray(sample['groundtruth_pcd'].points)
             part_np = np.asarray(sample['rgbd_pcd'].points)
             fid = sample['fruit_id']
             aligned_data= sample['aligned_data']
             aligned_data_length = sample['aligned_data_length']
 
-   
+            aligned_xyz = aligned_data[:,:3]
+            aligned_rgb = aligned_data[:,3:]
+
+
+            # ipdb.set_trace()
             # Sparse representation using ground truth and cropped point cloud
             sparse = point_set_to_sparse(gt_np, part_np, 30000, 15000, 0.01)
+            #Using Aligned Data (nx6) instead of GT 
+            # sparse = point_set_to_sparse(aligned_data, part_np, 30000, 15000, 0.01)
+
 
             # Store the sparse components
             pcd_part.append(sparse[-1])
@@ -92,7 +101,9 @@ class FruitCollation:
                 'std': torch.stack(std).float(),
                 'fruit_id': fid,
                 'aligned_data': aligned_data,
-                'aligned_data_length': aligned_data_length
+                'aligned_data_length': aligned_data_length,
+                'aligned_xyz':aligned_xyz,
+                'aligned_rgb' : aligned_rgb
             }
 
 
@@ -217,7 +228,7 @@ def main(config, weights, checkpoint, test):
         trainer.test(model, data.test_dataloader())
     else:
         print('TRAINING MODE')
-        # trainer.fit(model, data) #for val
+        
         trainer.fit(model, data)
 
 if __name__ == "__main__":

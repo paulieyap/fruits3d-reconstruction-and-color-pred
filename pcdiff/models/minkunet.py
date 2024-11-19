@@ -129,12 +129,12 @@ class MinkGlobalEnc(nn.Module):
     def __init__(self, **kwargs):
         super().__init__()
         cr = kwargs.get('cr', 1.0)
-        in_channels = kwargs.get('in_channels', 3)
+        in_channels = kwargs.get('in_channels', 6) #3
         cs = [32, 32, 64, 128, 256, 256, 128, 96, 96]
         cs = [int(cr * x) for x in cs]
         self.embed_dim = cs[-1]
         self.run_up = kwargs.get('run_up', True)
-        self.D = kwargs.get('D', 3) #3
+        self.D = kwargs.get('D', 6) #3
         self.stem = nn.Sequential(
             ME.MinkowskiConvolution(in_channels, cs[0], kernel_size=3, stride=1, dimension=self.D),
             ME.MinkowskiBatchNorm(cs[0]),
@@ -199,6 +199,7 @@ class MinkUNetDiff(nn.Module):
 
         cr = kwargs.get('cr', 1.0)
         in_channels = kwargs.get('in_channels', 6)
+        #changed to 6
         cs = [32, 32, 64, 128, 256, 256, 128, 96, 96]
         cs = [int(cr * x) for x in cs] 
         self.embed_dim = cs[-1]

@@ -61,8 +61,8 @@ class DiffusionPoints(LightningModule):
 
         # self.partial_enc = minknet.MinkGlobalEnc(in_channels=3, out_channels=self.hparams['model']['out_dim']) #96
         # self.model = minknet.MinkUNetDiff(in_channels=3, out_channels=self.hparams['model']['out_dim']) #96
-        self.partial_enc = minknet.MinkGlobalEnc(in_channels=3, out_channels=self.hparams['model']['out_dim']) #96
-        self.model = minknet.MinkUNetDiff(in_channels=3, out_channels=self.hparams['model']['out_dim']) #96
+        self.partial_enc = minknet.MinkGlobalEnc(in_channels=6, out_channels=self.hparams['model']['out_dim']) #96
+        self.model = minknet.MinkUNetDiff(in_channels=6, out_channels=self.hparams['model']['out_dim']) #96
 
         self.chamfer_distance = ChamferDistance()
         self.precision_recall = PrecisionRecall(0.001,0.01,100)
@@ -159,15 +159,16 @@ class DiffusionPoints(LightningModule):
         return F.mse_loss(y, noise)
 
     def forward(self, x_full, x_full_sparse, x_part, t):
+        # ipdb.set_trace()
         part_feat = self.partial_enc(x_part)
         out = self.model(x_full, x_full_sparse, part_feat, t)
         torch.cuda.empty_cache()
         
-        return out.reshape(t.shape[0],-1,3)
+        return out.reshape(t.shape[0],-1,6)
         # return out.reshape(t.shape[0],-1,3)
 
     def points_to_tensor(self, x_feats, mean, std):
-        ipdb.set_trace()
+        # ipdb.set_trace()
 
         x_feats = ME.utils.batched_coordinates(list(x_feats[:]), dtype=torch.float32, device=self.device)
         #creates another dimension which is the batch index
@@ -187,7 +188,7 @@ class DiffusionPoints(LightningModule):
 
         return x_t
 
-    def training_step(self, batch:dict, batch_idx):
+    def training_step(self, batch:dict, batch_idx): #use aligned_data pcd now instead of pcd_full?
         # initial random noise
         torch.cuda.empty_cache()
         noise = torch.randn(batch['pcd_full'].shape, device=self.device)
@@ -207,6 +208,7 @@ class DiffusionPoints(LightningModule):
             x_part = self.points_to_tensor(
                 torch.zeros_like(batch['pcd_part']), torch.zeros_like(batch['mean']), torch.zeros_like(batch['std'])
             )
+        ipdb.set_trace()
 
         denoise_t = self.forward(x_full, x_full.sparse(), x_part, t)
         loss = self.p_losses(denoise_t, noise) #loss_xyz
