@@ -62,7 +62,7 @@ class DiffusionPoints(LightningModule):
         # self.partial_enc = minknet.MinkGlobalEnc(in_channels=3, out_channels=self.hparams['model']['out_dim']) #96
         # self.model = minknet.MinkUNetDiff(in_channels=3, out_channels=self.hparams['model']['out_dim']) #96
         self.partial_enc = minknet.MinkGlobalEnc(in_channels=6, out_channels=self.hparams['model']['out_dim']) #96
-        self.model = minknet.MinkUNetDiff(in_channels=6, out_channels=self.hparams['model']['out_dim']) #96
+        self.model = minknet.MinkUNetDiff(in_channels=6,out_channels=6) #changed to 6
 
         self.chamfer_distance = ChamferDistance()
         self.precision_recall = PrecisionRecall(0.001,0.01,100)
@@ -159,7 +159,7 @@ class DiffusionPoints(LightningModule):
         return F.mse_loss(y, noise)
 
     def forward(self, x_full, x_full_sparse, x_part, t):
-        # ipdb.set_trace()
+        ipdb.set_trace()
         part_feat = self.partial_enc(x_part)
         out = self.model(x_full, x_full_sparse, part_feat, t)
         torch.cuda.empty_cache()
@@ -174,7 +174,9 @@ class DiffusionPoints(LightningModule):
         #creates another dimension which is the batch index
 
         x_coord = x_feats[:,:4].clone() #batch index, x y z
-        x_coord[:,1:] = feats_to_coord(x_feats[:,1:4], self.hparams['data']['resolution'], mean, std)
+
+
+        x_coord[:,1:] = feats_to_coord(x_feats[:,1:4], self.hparams['data']['resolution'], mean[:,:3], std[:,:3])
         #multiplies everything by ~1000 - 1mm == 1m 
         x_t = ME.TensorField(
             features=x_feats[:,1:], #in mm
@@ -208,11 +210,16 @@ class DiffusionPoints(LightningModule):
             x_part = self.points_to_tensor(
                 torch.zeros_like(batch['pcd_part']), torch.zeros_like(batch['mean']), torch.zeros_like(batch['std'])
             )
+        
         ipdb.set_trace()
-
         denoise_t = self.forward(x_full, x_full.sparse(), x_part, t)
-        loss = self.p_losses(denoise_t, noise) #loss_xyz
-        #loss_rgb
+        loss_xyz = self.p_losses(denoise_t[...,:3], noise[...,:3]) #loss_xyz
+
+        #remove the non-colored points when computing 
+        
+
+        loss_rgb = self.p_losses(denoise_t[...,3:], noise[...,3:])
+       
         self.log('train/diff_loss', loss)
         #log all losses individually 
 

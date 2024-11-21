@@ -181,7 +181,7 @@ class ShapeCompletionDataset():
             if np.linalg.norm(point - nearest_point) < 0.01:  # Threshold distance
                 output[i, 3:] = rgb_colors[idx[0]]
 
-        # ipdb.set_trace()
+ 
         #print no of colored points
         length = output.shape[0]
         return output, length
@@ -223,6 +223,7 @@ class ShapeCompletionDataset():
         frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
         frame_pts = np.array(frame_pcd.points)
         frame_rgb = np.array(frame_pcd.colors)
+        rgbd_pcd_ = np.concatenate((frame_pts,frame_rgb), axis=-1)
         
 
 
@@ -236,7 +237,7 @@ class ShapeCompletionDataset():
 
             item = {
                 'groundtruth_pcd': gt_pcd,
-                'rgbd_pcd': frame_pcd,
+                'rgbd_pcd': rgbd_pcd_,
                 'fruit_id': fruit_id,
                 'aligned_data': aligned_output,
                 'aligned_data_length': length_
@@ -251,7 +252,7 @@ class ShapeCompletionDataset():
             aligned_output, length_ = self.align_pointcloud_with_rgb(pointcloud_xyz, frame_pts, frame_rgb)
             item = {
                 'groundtruth_pcd': gt_pcd,
-                'rgbd_pcd': frame_pcd,
+                'rgbd_pcd': rgbd_pcd_,
                 'fruit_id': fruit_id,
                 'aligned_data': aligned_output,
                 'aligned_data_length': length_

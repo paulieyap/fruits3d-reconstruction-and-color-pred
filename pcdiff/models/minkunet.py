@@ -134,7 +134,8 @@ class MinkGlobalEnc(nn.Module):
         cs = [int(cr * x) for x in cs]
         self.embed_dim = cs[-1]
         self.run_up = kwargs.get('run_up', True)
-        self.D = kwargs.get('D', 6) #3
+        self.D = kwargs.get('D', 3) #this is just the coords dimension - used to get the neighbors 
+
         self.stem = nn.Sequential(
             ME.MinkowskiConvolution(in_channels, cs[0], kernel_size=3, stride=1, dimension=self.D),
             ME.MinkowskiBatchNorm(cs[0]),
@@ -199,9 +200,12 @@ class MinkUNetDiff(nn.Module):
 
         cr = kwargs.get('cr', 1.0)
         in_channels = kwargs.get('in_channels', 6)
+        out_channels = kwargs.get('out_channels', 6)
         #changed to 6
         cs = [32, 32, 64, 128, 256, 256, 128, 96, 96]
         cs = [int(cr * x) for x in cs] 
+
+
         self.embed_dim = cs[-1]
         self.run_up = kwargs.get('run_up', True)
         self.D = kwargs.get('D', 3)
@@ -431,7 +435,7 @@ class MinkUNetDiff(nn.Module):
         self.last  = nn.Sequential(
             nn.Linear(cs[8], 20),
             nn.LeakyReLU(0.1, inplace=True),
-            nn.Linear(20, 3), #change to 6 output size 
+            nn.Linear(20, out_channels), #change to 6 output size 
         )
 
         self.weight_initialization()

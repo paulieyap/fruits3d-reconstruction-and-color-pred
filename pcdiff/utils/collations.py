@@ -6,11 +6,11 @@ import numpy as np
 import ipdb
 
 def feats_to_coord(p_feats, resolution, mean, std):
-    p_feats = unormalize_pcd(p_feats.reshape(mean.shape[0],-1,3), mean, std)
+    p_feats = unormalize_pcd(p_feats.reshape(mean.shape[0],-1,mean.shape[-1]), mean, std) #feats = is the shape of the last dimension of the mean
     p_coord = torch.round(p_feats / resolution)
     #p_coord -= p_coord.min(1, keepdim=True).values
 
-    return p_coord.reshape(-1,3)
+    return p_coord.reshape(-1,mean.shape[-1])
 
 def normalize_pcd(points, mean, std):
     return (points - mean[:,None,:]) / std[:,None,:] if len(mean.shape) == 2 else (points - mean) / std
@@ -34,13 +34,23 @@ def point_set_to_sparse(p_full, p_part, n_full, n_part, resolution): #replace p_
     #p_full = torch.cat((p_full, p_part), axis=0)
     p_mean, p_std = p_full.mean(axis=0), p_full.std(axis=0)
 
-    p_full = normalize_pcd(p_full, p_mean, p_std)
+    
+    p_full[:,:3] = normalize_pcd(p_full[:,:3], p_mean[:3], p_std[:3]) 
+    #create the mask
+    mask = p_full[:,4] != -1 #-1 for all r g b 
+    #normalize RGB where it's not (-1)
+    p_mean[3:], p_std[3:] = p_full[mask,3:].mean(axis=0), p_full[mask,3:].std(axis=0)
+
+    p_full[mask,3:] = normalize_pcd(p_full[mask,3:],p_mean[3:], p_std[3:])
+
+
     p_part = normalize_pcd(p_part, p_mean, p_std)
     
-    
-    return [p_full, p_mean, p_std, p_part]
+    # ipdb.set_trace()
+    return [p_full, p_mean, p_std, p_part, mask]
 
 #based off of points set to sparse
+'''
 def rgbd_set_to_sparse(rgbd_pcd, n_full, n_part, resolution): #replace p_full with rgbd
     """
     Converts a point cloud to sparse representation, handling XYZRGB in p_full and p_part.
@@ -106,7 +116,7 @@ def normalize_pcd(pcd, mean, std):
     """
     return (pcd - mean) / std
 
-
+'''
 def list_segments_points(p_coord, labels, resolution=0.05):
     # labels are batch_id segs_id and we now concatenate the point index (the same as the coords and feats)
     idx_labels = np.concatenate((labels, np.arange(len(labels))[:,None]), axis=-1)
