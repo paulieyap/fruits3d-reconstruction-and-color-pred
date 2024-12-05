@@ -110,9 +110,10 @@ class DiffusionPoints(LightningModule):
 
 
     def reset_partial_pcd(self, x_part, x_uncond, x_mean, x_std):
-        x_part = self.points_to_tensor(x_part.F.reshape(x_mean.shape[0],-1,3).detach(), x_mean, x_std)
+        #changed to 6
+        x_part = self.points_to_tensor(x_part.F.reshape(x_mean.shape[0],-1,6).detach(), x_mean, x_std)
         x_uncond = self.points_to_tensor(
-                torch.zeros_like(x_part.F.reshape(x_mean.shape[0],-1,3)), torch.zeros_like(x_mean), torch.zeros_like(x_std)
+                torch.zeros_like(x_part.F.reshape(x_mean.shape[0],-1,6)), torch.zeros_like(x_mean), torch.zeros_like(x_std)
         )
 
         return x_part, x_uncond
@@ -126,7 +127,9 @@ class DiffusionPoints(LightningModule):
             t = torch.ones(gt_pts.shape[0]).cuda().long() * self.dpm_scheduler.timesteps[t].cuda()
 
             noise_t = self.classfree_forward(x_t, x_cond, x_uncond, t)
-            x_t = self.dpm_scheduler.step(noise_t, t[0], x_t.F.reshape(t.shape[0],-1,3))['prev_sample']
+
+            #chnage to 6
+            x_t = self.dpm_scheduler.step(noise_t, t[0], x_t.F.reshape(t.shape[0],-1,6))['prev_sample']
             x_t = self.points_to_tensor(x_t, x_mean, x_std)
 
             # this is needed otherwise minkEngine will keep "stacking" coords maps over the x_part and x_uncond
@@ -159,7 +162,7 @@ class DiffusionPoints(LightningModule):
         return F.mse_loss(y, noise)
 
     def forward(self, x_full, x_full_sparse, x_part, t):
-        ipdb.set_trace()
+
         part_feat = self.partial_enc(x_part)
         out = self.model(x_full, x_full_sparse, part_feat, t)
         torch.cuda.empty_cache()
@@ -194,7 +197,11 @@ class DiffusionPoints(LightningModule):
         # initial random noise
         torch.cuda.empty_cache()
         noise = torch.randn(batch['pcd_full'].shape, device=self.device)
-        
+        mask = batch['mask']
+        mask = torch.stack(mask)
+        #breakpoint check: batch['pcd_full'] has -1's !
+
+
         # sample step t
         t = torch.randint(0, self.t_steps, size=(batch['pcd_full'].shape[0],), device=self.device)
         # sample q at step t
@@ -205,29 +212,31 @@ class DiffusionPoints(LightningModule):
 
         # for classifier-free guidance swithc between conditional and unconditional training
         if torch.rand(1) > self.hparams['train']['uncond_prob'] or batch['pcd_full'].shape[0] == 1:
+            
             x_part = self.points_to_tensor(batch['pcd_part'], batch['mean'], batch['std'])
         else:
             x_part = self.points_to_tensor(
                 torch.zeros_like(batch['pcd_part']), torch.zeros_like(batch['mean']), torch.zeros_like(batch['std'])
             )
         
-        ipdb.set_trace()
-        denoise_t = self.forward(x_full, x_full.sparse(), x_part, t)
+        
+        denoise_t = self.forward(x_full, x_full.sparse(), x_part, t) #1,3000,6
         loss_xyz = self.p_losses(denoise_t[...,:3], noise[...,:3]) #loss_xyz
 
         #remove the non-colored points when computing 
-        
+        loss_rgb = self.p_losses(denoise_t[mask][...,3:], noise[mask][...,3:])
 
-        loss_rgb = self.p_losses(denoise_t[...,3:], noise[...,3:])
-       
-        self.log('train/diff_loss', loss)
+        loss_sum = loss_xyz + loss_rgb 
+        self.log('train/diff_loss', loss_sum)
         #log all losses individually 
 
         #loss = loss_xyz + loss_rgb 
-        self.log('train/loss', loss)
+        self.log('train/loss_xyz', loss_xyz)
+        self.log('train/loss_rgb', loss_rgb)
+        self.log('train/loss', loss_sum)
         torch.cuda.empty_cache()
 
-        return loss
+        return loss_sum
 
     def validation_step(self, batch:dict, batch_idx):
         if batch_idx != 0:
@@ -253,17 +262,22 @@ class DiffusionPoints(LightningModule):
 
             x_gen_eval = self.p_sample_loop(x_full, x_cond, x_uncond, gt_pts, batch['mean'], batch['std'], batch_idx)
             #edit to 6 output.... also check
-            x_gen_eval = x_gen_eval.F.reshape((gt_pts.shape[0],-1,3))
+            x_gen_eval = x_gen_eval.F.reshape((gt_pts.shape[0],-1,6)) #changed to 6
 
             for i in range(len(batch['pcd_full'])):
+
                 pcd_pred = o3d.geometry.PointCloud()
+
                 c_pred = unormalize_pcd(x_gen_eval, batch['mean'], batch['std'])[i].cpu().detach().numpy()
-                pcd_pred.points = o3d.utility.Vector3dVector(c_pred)
+                pcd_pred.points = o3d.utility.Vector3dVector(c_pred[:,:3])
+                pcd_pred.colors = o3d.utility.Vector3dVector(c_pred[:,3:])
 
                 pcd_gt = o3d.geometry.PointCloud()
                 g_pred = unormalize_pcd(batch['pcd_full'], batch['mean'], batch['std'])[i].cpu().detach().numpy()
-                pcd_gt.points = o3d.utility.Vector3dVector(g_pred) #later: also create pcd_gt.colors 
+                pcd_gt.points = o3d.utility.Vector3dVector(g_pred[:,:3]) 
+                pcd_gt.colors = o3d.utility.Vector3dVector(g_pred[:,3:]) 
 
+                # ipdb.set_trace()
                 o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}.ply", pcd_pred)
 
                 self.chamfer_distance.update(pcd_gt, pcd_pred)
@@ -359,30 +373,51 @@ class DiffusionPoints(LightningModule):
             x_uncond = self.points_to_tensor(
                 torch.zeros_like(batch['pcd_part']), torch.zeros_like(batch['mean']), torch.zeros_like(batch['std'])
             )
-            
             x_gen_eval = self.p_sample_loop(x_full, x_cond, x_uncond, gt_pts, batch['mean'], batch['std'], batch_idx)
-            x_gen_eval = x_gen_eval.F.reshape((gt_pts.shape[0],-1,3))
+            #edit to 6 output.... also check
+            x_gen_eval = x_gen_eval.F.reshape((gt_pts.shape[0],-1,6)) #changed to 6
 
-
-
-            
             for i in range(len(batch['pcd_full'])):
+
                 pcd_pred = o3d.geometry.PointCloud()
+
                 c_pred = unormalize_pcd(x_gen_eval, batch['mean'], batch['std'])[i].cpu().detach().numpy()
-                pcd_pred.points = o3d.utility.Vector3dVector(c_pred)
+                pcd_pred.points = o3d.utility.Vector3dVector(c_pred[:,:3])
+                pcd_pred.colors = o3d.utility.Vector3dVector(c_pred[:,3:])
 
                 pcd_gt = o3d.geometry.PointCloud()
                 g_pred = unormalize_pcd(batch['pcd_full'], batch['mean'], batch['std'])[i].cpu().detach().numpy()
-                pcd_gt.points = o3d.utility.Vector3dVector(g_pred)
-                fid = batch['fruit_id']
-                print("Fruit ID: ", fid)
+                pcd_gt.points = o3d.utility.Vector3dVector(g_pred[:,:3]) 
+                pcd_gt.colors = o3d.utility.Vector3dVector(g_pred[:,3:])
                 # ipdb.set_trace()
 
-                
-                o3d.io.write_point_cloud(f"{seq_dir}/{fid}.ply", pcd_pred)
+                o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}.ply", pcd_pred)
 
                 self.chamfer_distance.update(pcd_gt, pcd_pred)
                 self.precision_recall.update(pcd_gt, pcd_pred)
+            # x_gen_eval = self.p_sample_loop(x_full, x_cond, x_uncond, gt_pts, batch['mean'], batch['std'], batch_idx)
+            # x_gen_eval = x_gen_eval.F.reshape((gt_pts.shape[0],-1,3))
+
+
+
+            
+            # for i in range(len(batch['pcd_full'])):
+            #     pcd_pred = o3d.geometry.PointCloud()
+            #     c_pred = unormalize_pcd(x_gen_eval, batch['mean'], batch['std'])[i].cpu().detach().numpy()
+            #     pcd_pred.points = o3d.utility.Vector3dVector(c_pred)
+
+            #     pcd_gt = o3d.geometry.PointCloud()
+            #     g_pred = unormalize_pcd(batch['pcd_full'], batch['mean'], batch['std'])[i].cpu().detach().numpy()
+            #     pcd_gt.points = o3d.utility.Vector3dVector(g_pred)
+            #     fid = batch['fruit_id']
+            #     print("Fruit ID: ", fid)
+            #     ipdb.set_trace()
+
+                
+            #     o3d.io.write_point_cloud(f"{seq_dir}/{fid}.ply", pcd_pred)
+
+            #     self.chamfer_distance.update(pcd_gt, pcd_pred)
+            #     self.precision_recall.update(pcd_gt, pcd_pred)
 
 
         cd_mean, cd_std = self.chamfer_distance.compute()

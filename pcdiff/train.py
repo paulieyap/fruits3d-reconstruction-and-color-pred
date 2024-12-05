@@ -35,40 +35,6 @@ class FruitCollation:
         
 
         for sample in data:
-            '''
-            if len(sample) == 1:
-                # Testing Phase: Use only RGBD point cloud data (no ground truth)
-                rgbd_np = np.asarray(sample['rgbd_pcd'].points)
-
-                # Perform sparse conversion with only RGBD data
-                sparse = rgbd_set_to_sparse(rgbd_np, 30000, 15000, 0.01)
-
-                # Store the sparse components
-                pcd_part.append(sparse[-1])
-                mean.append(sparse[1])
-                std.append(sparse[2])
-
-                return {
-                    'mean': torch.stack(mean).float(),
-                    'std': torch.stack(std).float(),
-                    'pcd_part': torch.stack(pcd_part).float(),
-                }
-
-            else:
-            '''
-                # Training Phase: Use ground truth and RGBD data
-            # bbox = sample['groundtruth_pcd'].get_axis_aligned_bounding_box()
-            # cropped = sample['rgbd_pcd'].crop(bbox)
-
-            # # Check if the cropped point cloud contains any points
-            # if len(cropped.points) == 0:
-            #     # If no points are within the bounding box, retain the original RGBD point cloud
-            #     part_np = np.asarray(sample['rgbd_pcd'].points)
-            # else:
-            #     # Otherwise, use the cropped point cloud
-            #     part_np = np.asarray(cropped.points)
-
-            
             gt_np = np.asarray(sample['groundtruth_pcd'].points)
             # part_np = np.asarray(sample['rgbd_pcd'].points)
             part_np= sample['rgbd_pcd']
@@ -79,22 +45,17 @@ class FruitCollation:
             aligned_xyz = aligned_data[:,:3]
             aligned_rgb = aligned_data[:,3:]
 
-
-            # ipdb.set_trace()
-            # Sparse representation using ground truth and cropped point cloud
-
             # sparse = point_set_to_sparse(gt_np, part_np, 30000, 15000, 0.01)
-            #Using Aligned Data (nx6) instead of GT 
-            # ipdb.set_trace()
             sparse = point_set_to_sparse(aligned_data, part_np, 30000, 15000, 0.01)
 
 
             # Store the sparse components
-            pcd_part.append(sparse[-1])
+            
             pcd_full.append(sparse[0])
             mean.append(sparse[1])
             std.append(sparse[2])
-            mask.append(sparse[3])
+            pcd_part.append(sparse[3])
+            mask.append(sparse[-1])
 
         
         #return the items we would need in the training, etc
@@ -125,8 +86,8 @@ class FruitDataModule(LightningDataModule):
         print('Train samples: ', len(loader))
         '''
         dataset = ShapeCompletionDataset(data_source=self.data_source, split='train')
-        loader = DataLoader(dataset, batch_size=1, num_workers=0, collate_fn=FruitCollation())
-        print('Train samples: ', len(loader))
+        loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
+
         
         return loader
 
@@ -136,11 +97,9 @@ class FruitDataModule(LightningDataModule):
         loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
         print('Val samples: ', len(loader))
         '''
-        
         dataset = ShapeCompletionDataset(data_source=self.data_source, split='val')#split='val'
         loader = DataLoader(dataset, batch_size=1, num_workers=0, collate_fn=FruitCollation())
-        print('Val samples: ', len(loader))
-      
+
         return loader
 
     def test_dataloader(self):
@@ -149,16 +108,9 @@ class FruitDataModule(LightningDataModule):
         loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
         print('Test samples: ', len(loader))    
         '''
-        # ipdb.set_trace()
         dataset = ShapeCompletionDataset(data_source=self.data_source, split ='test') 
-
-        print("Dataloader: ", len(dataset))
         loader = DataLoader(dataset, batch_size=1, num_workers=0, collate_fn=FruitCollation())
 
-
-        print('Test samples: ', len(loader))  
-        # ipdb.set_trace()
-      
 
         return loader
 
@@ -195,7 +147,6 @@ def main(config, weights, checkpoint, test):
 
     data = FruitDataModule('/export/data/s7jeyapp/shape_completion_challenge')
     # data = FruitDataModule('/export/data/s7jeyapp/IGG/igg_fruit/SweetPepper')
-    
     # data = FruitDataModule('/mnt/igg_fruit/processed/SweetPepper')
     # data = FruitDataModule('/export/data/s7jeyapp/igg_fruit/SweetPepper/p1')
     # data = FruitDataModule('/cache/s7jeyapp/igg_fruit/SweetPepper')

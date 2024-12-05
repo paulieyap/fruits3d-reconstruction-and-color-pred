@@ -44,15 +44,16 @@ class ShapeCompletionDataset():
                 fid_root = os.path.join(self.data_source, self.split, fid)
                 frames = os.listdir(os.path.join(fid_root,'input/masks/'))
 
-                if frames:  
-                    first_frame = sorted(frames)[0]  # Get the first frame (sorted alphabetically)
-                    fruit_list.append([first_frame, fid_root])
-                    fruit_id.append([fid])
+                # if frames:  
+                #     first_frame = sorted(frames)[0]  # Get the first frame (sorted alphabetically)
+                #     fruit_list.append([first_frame, fid_root])
+                #     fruit_id.append([fid])
 
 
             #use for training
-                # for frame in frames:
-                #     fruit_list.append([frame,fid_root])
+                for frame in frames:
+                    fruit_list.append([frame,fid_root,fid])
+                    
 
 
                     
@@ -193,8 +194,9 @@ class ShapeCompletionDataset():
     def __getitem__(self, idx):
         
         print("IDX: ", idx)
-        frameid, fid_root = self.fruit_list[idx]
-        fruit_id = self.fruit_id[idx][0]
+        frameid, fid_root ,fruit_id= self.fruit_list[idx]
+
+        # fruit_id = self.fruit_id[idx][0]
 
         intrinsic_path = os.path.join(fid_root, 'input/intrinsic.json')
         intrinsic = self.load_K(intrinsic_path)
@@ -213,11 +215,7 @@ class ShapeCompletionDataset():
 
         frame_key = frameid.replace('png', '')
 
-        
-        # Create the RGB points and colors for alignment
 
-        # rgb_points = rgb.reshape(-1, 3)  
-        # rgb_colors = rgb.reshape(-1, 3) / 255.0  # Normalize
 
         # Frame is the PCD_PART. Generate the point cloud from RGBD data
         frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
@@ -227,41 +225,41 @@ class ShapeCompletionDataset():
         
 
 
-        if self.split == 'train':
+        if self.split != 'test':
             gt_pcd = o3d.io.read_point_cloud(os.path.join(fid_root, 'gt/pcd/fruit.ply'))
                     # Get the XYZ coordinates from the point cloud
-            pointcloud_xyz = np.asarray(gt_pcd.points)
+            
+        else: 
+            gt_pcd = frame_pcd
+        # Align point cloud with RGB data and get nx6 matrix
 
-            # Align point cloud with RGB data and get nx6 matrix
-            aligned_output,length_ = self.align_pointcloud_with_rgb(pointcloud_xyz, frame_pts, frame_rgb)
+        pointcloud_xyz = np.asarray(gt_pcd.points)
+        aligned_output,length_ = self.align_pointcloud_with_rgb(pointcloud_xyz, frame_pts, frame_rgb)
+        
 
-            item = {
-                'groundtruth_pcd': gt_pcd,
-                'rgbd_pcd': rgbd_pcd_,
-                'fruit_id': fruit_id,
-                'aligned_data': aligned_output,
-                'aligned_data_length': length_
 
-            }
-        elif self.split == 'test':
-            gt_pcd = o3d.io.read_point_cloud('/export/data/s7jeyapp/shape_completion_challenge/train/lab1/gt/pcd/fruit.ply')
-                    # Get the XYZ coordinates from the point cloud
-            pointcloud_xyz = np.asarray(gt_pcd.points)
+        item = {
+            'groundtruth_pcd':  gt_pcd,
+            'rgbd_pcd': rgbd_pcd_,
+            'fruit_id': fruit_id,
+            'aligned_data': aligned_output,
+            'aligned_data_length': length_
+        }
 
-            # Align point cloud with RGB data and get nx6 matrix
-            aligned_output, length_ = self.align_pointcloud_with_rgb(pointcloud_xyz, frame_pts, frame_rgb)
-            item = {
-                'groundtruth_pcd': gt_pcd,
-                'rgbd_pcd': rgbd_pcd_,
-                'fruit_id': fruit_id,
-                'aligned_data': aligned_output,
-                'aligned_data_length': length_
-            }
-
-        # Add aligned data
-        # item['aligned_data'] = {'nx6_matrix': aligned_output}
-        # ipdb.set_trace()
+        
         return item
+
+
+        # elif self.split == 'test':
+        #     gt_pcd = o3d.io.read_point_cloud('/export/data/s7jeyapp/shape_completion_challenge/train/lab1/gt/pcd/fruit.ply')
+        #             # Get the XYZ coordinates from the point cloud
+        #     pointcloud_xyz = np.asarray(gt_pcd.points)
+
+        #     # Align point cloud with RGB data and get nx6 matrix
+        #     aligned_output, length_ = self.align_pointcloud_with_rgb(pointcloud_xyz, frame_pts, frame_rgb)
+        
+        
+
 
 
 ##############################CODE DUMP ##################################
