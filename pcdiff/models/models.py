@@ -104,8 +104,18 @@ class DiffusionPoints(LightningModule):
         x_t_sparse = x_t.sparse()
         x_cond = self.forward(x_t, x_t_sparse, x_cond, t)
         x_uncond = self.forward(x_t, x_t_sparse, x_uncond, t)
+        
+        #bytedance sec 3.4
+        guidance_weight = self.hparams['train']['uncond_w']
+        rescale_strength = self.hparams['train']['rescale_strength']
 
-        return x_uncond + self.hparams['train']['uncond_w'] * (x_cond - x_uncond)
+        x_cfg = x_uncond + guidance_weight * (x_cond - x_uncond) #equation 13
+        std_cond = torch.std(x_cond,dim=2,keepdim=True)
+        std_cfg = torch.std(x_cfg,dim=2,keepdim=True)    
+        x_rescaled = x_cfg * (std_cond/std_cfg)
+        x_final = rescale_strength * x_rescaled + (1-rescale_strength) * x_cfg #equation16
+
+        return x_final
 
 
 
@@ -127,8 +137,6 @@ class DiffusionPoints(LightningModule):
             t = torch.ones(gt_pts.shape[0]).cuda().long() * self.dpm_scheduler.timesteps[t].cuda()
 
             noise_t = self.classfree_forward(x_t, x_cond, x_uncond, t)
-
-            #chnage to 6
             x_t = self.dpm_scheduler.step(noise_t, t[0], x_t.F.reshape(t.shape[0],-1,6))['prev_sample']
             x_t = self.points_to_tensor(x_t, x_mean, x_std)
 

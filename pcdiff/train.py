@@ -183,7 +183,8 @@ def main(config, weights, checkpoint, test):
         print('TESTING MODE')
       
         # trainer.test(model, data)
-        trainer.test(model, data.test_dataloader())
+        # trainer.test(model, data.test_dataloader())
+        trainer.test(model, data.val_dataloader())
     else:
         print('TRAINING MODE')
         

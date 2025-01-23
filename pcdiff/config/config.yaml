@@ -17,6 +17,7 @@ data:
 train:
     uncond_prob: 0.1
     uncond_w: 2 #unconditional weight #not used during training 
+    rescale_strength: 0.7
     n_gpus: 1
     num_workers: 0
     max_epoch: 50
