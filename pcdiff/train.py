@@ -35,6 +35,7 @@ class FruitCollation:
         
 
         for sample in data:
+        
             gt_np = np.asarray(sample['groundtruth_pcd'].points)
             # part_np = np.asarray(sample['rgbd_pcd'].points)
             part_np= sample['rgbd_pcd']
@@ -172,7 +173,7 @@ def main(config, weights, checkpoint, test):
                       max_epochs= cfg['train']['max_epoch'],
                       callbacks=[lr_monitor, checkpoint_saver],
                       check_val_every_n_epoch=1,
-                      num_sanity_val_steps= 0, #skips checking the val before training
+                      num_sanity_val_steps= 1, #skips checking the val before training
                       limit_val_batches=  1 #0.02 #1 
                       #gradient_clip_val=0.5,
                       )
@@ -183,7 +184,7 @@ def main(config, weights, checkpoint, test):
         print('TESTING MODE')
       
         # trainer.test(model, data)
-        # trainer.test(model, data.test_dataloader())
+        # trainer.test(model, data.test_dataloader()) #use to swtich between validation or test data
         trainer.test(model, data.val_dataloader())
     else:
         print('TRAINING MODE')

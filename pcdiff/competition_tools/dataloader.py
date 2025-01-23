@@ -68,6 +68,8 @@ class ShapeCompletionDataset():
     def get_rgbd(self, fid):
         fid_root = self.fruit_list[fid]['path']
 
+        intrinsic_path = os.path.join(fid_root,'input/intrinsic.json')
+        intrinsic = self.load_K(intrinsic_path)
 
         rgbd_data = {
             'intrinsic':intrinsic,
@@ -192,11 +194,10 @@ class ShapeCompletionDataset():
         return len(self.fruit_list)
 
     def __getitem__(self, idx):
-        
+        # ipdb.set_trace()
         print("IDX: ", idx)
-        frameid, fid_root ,fruit_id= self.fruit_list[idx]
 
-        # fruit_id = self.fruit_id[idx][0]
+        frameid, fid_root ,fruit_id= self.fruit_list[idx]
 
         intrinsic_path = os.path.join(fid_root, 'input/intrinsic.json')
         intrinsic = self.load_K(intrinsic_path)
@@ -216,13 +217,16 @@ class ShapeCompletionDataset():
         frame_key = frameid.replace('png', '')
 
 
+        
 
         # Frame is the PCD_PART. Generate the point cloud from RGBD data
         frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
-        frame_pts = np.array(frame_pcd.points)
-        frame_rgb = np.array(frame_pcd.colors)
-        rgbd_pcd_ = np.concatenate((frame_pts,frame_rgb), axis=-1)
+
+        outlier_free, ind = frame_pcd.remove_statistical_outlier(nb_neighbors=200, std_ratio=2.0)
         
+        frame_pts = np.array(outlier_free.points)
+        frame_rgb = np.array(outlier_free.colors)
+        rgbd_pcd_ = np.concatenate((frame_pts,frame_rgb), axis=-1)
 
 
         if self.split != 'test':
@@ -235,7 +239,10 @@ class ShapeCompletionDataset():
 
         pointcloud_xyz = np.asarray(gt_pcd.points)
         aligned_output,length_ = self.align_pointcloud_with_rgb(pointcloud_xyz, frame_pts, frame_rgb)
-        
+
+        # ipdb.set_trace()
+        # o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}_gt.ply", pcd_gt)
+        # o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}.ply", pcd_pred)
 
 
         item = {

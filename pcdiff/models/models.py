@@ -110,12 +110,13 @@ class DiffusionPoints(LightningModule):
         rescale_strength = self.hparams['train']['rescale_strength']
 
         x_cfg = x_uncond + guidance_weight * (x_cond - x_uncond) #equation 13
-        std_cond = torch.std(x_cond,dim=2,keepdim=True)
-        std_cfg = torch.std(x_cfg,dim=2,keepdim=True)    
-        x_rescaled = x_cfg * (std_cond/std_cfg)
-        x_final = rescale_strength * x_rescaled + (1-rescale_strength) * x_cfg #equation16
+        #std_cond = torch.std(x_cond,dim=2,keepdim=True)
+        #std_cfg = torch.std(x_cfg,dim=2,keepdim=True)    
+        #x_rescaled = x_cfg * (std_cond/std_cfg)
+        #x_final = rescale_strength * x_rescaled + (1-rescale_strength) * x_cfg #equation16
 
-        return x_final
+        #return x_final
+        return x_cfg
 
 
 
@@ -207,6 +208,7 @@ class DiffusionPoints(LightningModule):
         noise = torch.randn(batch['pcd_full'].shape, device=self.device)
         mask = batch['mask']
         mask = torch.stack(mask)
+        # ipdb.set_trace()
         #breakpoint check: batch['pcd_full'] has -1's !
 
 
@@ -252,10 +254,12 @@ class DiffusionPoints(LightningModule):
 
         self.model.eval()
         self.partial_enc.eval()
-        seq_dir =  f'{self.logger.log_dir}/generated_pcd'
+        seq_dir =  f'{self.logger.log_dir}/generated_pcd_validation'
         makedirs(seq_dir, exist_ok=True)
 
+        print('validation Fruit ID: ', batch['fruit_id'])
 
+   
 
         with torch.no_grad():
             gt_pts = batch['pcd_full'].detach().cpu().numpy()
@@ -286,6 +290,7 @@ class DiffusionPoints(LightningModule):
                 pcd_gt.colors = o3d.utility.Vector3dVector(g_pred[:,3:]) 
 
                 # ipdb.set_trace()
+                o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}_gt.ply", pcd_gt)
                 o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}.ply", pcd_pred)
 
                 self.chamfer_distance.update(pcd_gt, pcd_pred)
@@ -363,13 +368,14 @@ class DiffusionPoints(LightningModule):
             return {'test/cd_mean': cd_mean, 'test/cd_std': cd_std, 'test/precision': pr, 'test/recall': re, 'test/fscore': f1}
 
     '''
-    def test_step(self, batch:dict, batch_idx):
+    def test_step(self, batch:dict, batch_idx): #used for both testing and validation
         self.model.eval()
         self.partial_enc.eval()
 
       
         seq_dir =  f'{self.logger.log_dir}/generated_pcd_test'
         makedirs(seq_dir, exist_ok=True)
+        print('Testing Fruit ID: ', batch['fruit_id'])
 
 
         with torch.no_grad():
@@ -382,9 +388,8 @@ class DiffusionPoints(LightningModule):
                 torch.zeros_like(batch['pcd_part']), torch.zeros_like(batch['mean']), torch.zeros_like(batch['std'])
             )
             x_gen_eval = self.p_sample_loop(x_full, x_cond, x_uncond, gt_pts, batch['mean'], batch['std'], batch_idx)
-            #edit to 6 output.... also check
             x_gen_eval = x_gen_eval.F.reshape((gt_pts.shape[0],-1,6)) #changed to 6
-
+     
             for i in range(len(batch['pcd_full'])):
 
                 pcd_pred = o3d.geometry.PointCloud()
@@ -397,8 +402,16 @@ class DiffusionPoints(LightningModule):
                 g_pred = unormalize_pcd(batch['pcd_full'], batch['mean'], batch['std'])[i].cpu().detach().numpy()
                 pcd_gt.points = o3d.utility.Vector3dVector(g_pred[:,:3]) 
                 pcd_gt.colors = o3d.utility.Vector3dVector(g_pred[:,3:])
-                # ipdb.set_trace()
 
+                pcd_part = o3d.geometry.PointCloud()
+                partial = unormalize_pcd(batch['pcd_part'], batch['mean'], batch['std'])[i].cpu().detach().numpy()
+                pcd_part.points = o3d.utility.Vector3dVector(partial[:,:3]) 
+                pcd_part.colors = o3d.utility.Vector3dVector(partial[:,3:])
+
+                # ipdb.set_trace() #try saving aligned output
+
+                o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}_partial.ply", pcd_part)
+                o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}_gt.ply", pcd_gt)
                 o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}.ply", pcd_pred)
 
                 self.chamfer_distance.update(pcd_gt, pcd_pred)
