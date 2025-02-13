@@ -153,12 +153,10 @@ class ShapeCompletionDataset():
     #     points = random_drop_n_cuboids(points)
 
     #     return np.squeeze(points, axis=0)
+
     @staticmethod
     def align_pointcloud_with_rgb(pointcloud_xyz, rgb_points, rgb_colors):
 
-
-
-        
         # Step 1: Create point cloud from XYZ data
         pc = o3d.geometry.PointCloud()
         pc.points = o3d.utility.Vector3dVector(pointcloud_xyz)
@@ -217,8 +215,7 @@ class ShapeCompletionDataset():
         frame_key = frameid.replace('png', '')
 
 
-        
-
+        ipdb.set_trace()
         # Frame is the PCD_PART. Generate the point cloud from RGBD data
         frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
 
@@ -240,11 +237,7 @@ class ShapeCompletionDataset():
         pointcloud_xyz = np.asarray(gt_pcd.points)
         aligned_output,length_ = self.align_pointcloud_with_rgb(pointcloud_xyz, frame_pts, frame_rgb)
 
-        # ipdb.set_trace()
-        # o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}_gt.ply", pcd_gt)
-        # o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}.ply", pcd_pred)
 
-        # ipdb.set_trace()
 
         item = {
             # 'groundtruth_pcd':  gt_pcd,

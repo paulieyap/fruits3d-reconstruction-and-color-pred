@@ -13,7 +13,10 @@ import open3d as o3d
 # import pcdiff.datasets.datasets as datasets
 import pcdiff.models.models as models
 from torch.utils.data import DataLoader
-from pcdiff.competition_tools.dataloader import ShapeCompletionDataset
+# from pcdiff.competition_tools.dataloader import ShapeCompletionDataset
+from pcdiff.original_tools.dataloader import ShapeCompletionDataset
+
+
 # from ipb_loaders.pointcloud.igg_fruit import IGGFruit
 # from ipb_loaders.rgbd.igg_fruit import IGGFruit
 from pcdiff.utils.collations import point_set_to_sparse
