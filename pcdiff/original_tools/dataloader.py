@@ -64,8 +64,15 @@ class ShapeCompletionDataset():
             frame_key = frameid.replace('png','')
 
             if self.return_pcd:
+                # ipdb.set_trace()
                 frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
-                rgbd_data['pcd'] += frame_pcd
+                frame_pcd_outlierRemoved, ind = frame_pcd.remove_statistical_outlier(nb_neighbors=200, std_ratio=2.0)
+                rgbd_data['pcd'] += frame_pcd_outlierRemoved
+
+
+                # #original below:
+                # frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
+                # rgbd_data['pcd'] += frame_pcd #aggregation of frames?
 
             rgbd_data['frames'][frame_key] = {
                 'rgb': rgb,
@@ -74,6 +81,7 @@ class ShapeCompletionDataset():
                 'pose': pose
             }
 
+        # ipdb.set_trace() 
 
         return rgbd_data
 
@@ -151,13 +159,15 @@ class ShapeCompletionDataset():
 
     def __getitem__(self, idx):
         
-        
 
         keys = list(self.fruit_list.keys())
         fid = keys[idx]
         
         gt_pcd = self.get_gt(fid)
         input_data = self.get_rgbd(fid)
+
+        partial_without_outliers, ind = input_data['pcd'].remove_statistical_outlier(nb_neighbors=200, std_ratio=2.0)
+
         
         item = {
             'groundtruth_pcd': gt_pcd
@@ -165,14 +175,22 @@ class ShapeCompletionDataset():
 
 
         if self.return_pcd:
-            item['rgbd_pcd'] = input_data['pcd'] #partial pointcloud
-
+            # item['rgbd_pcd'] = input_data['pcd'] #partial pointcloud
+            item['rgbd_pcd'] = partial_without_outliers#partial pointcloud
 
         if self.return_rgbd:
             item['rgbd_intrinsic'] = input_data['intrinsic']
             item['rgbd_frames'] = input_data['frames']
 
         ipdb.set_trace()
+
+
+
+        #find best frames, compare wrt standard dev and mean 
+        #filter out 
+        #align
+        #return item same as for validation and testing 
+        #export testing/generated pcds for benchmark
         return item
     
 
