@@ -244,15 +244,17 @@ class ShapeCompletionDataset():
         # o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}_gt.ply", pcd_gt)
         # o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}.ply", pcd_pred)
 
+        # ipdb.set_trace()
 
         item = {
-            'groundtruth_pcd':  gt_pcd,
+            # 'groundtruth_pcd':  gt_pcd,
+            'groundtruth_pcd':  rgbd_pcd_, #ground truth == partial pointcloud when doing test step with test dataloader
             'rgbd_pcd': rgbd_pcd_,
             'fruit_id': fruit_id,
             'aligned_data': aligned_output,
             'aligned_data_length': length_
         }
-
+        
         
         return item
 

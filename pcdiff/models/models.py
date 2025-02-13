@@ -410,9 +410,11 @@ class DiffusionPoints(LightningModule):
 
                 # ipdb.set_trace() #try saving aligned output
 
-                o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}_partial.ply", pcd_part)
-                o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}_gt.ply", pcd_gt)
-                o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}.ply", pcd_pred)
+                o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}_{batch['fruit_id']}_partial.ply", pcd_part)
+                o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}_{batch['fruit_id']}_gt.ply", pcd_gt)
+
+
+                o3d.io.write_point_cloud(f"{seq_dir}/{batch['fruit_id']}.ply", pcd_pred)
 
                 self.chamfer_distance.update(pcd_gt, pcd_pred)
                 self.precision_recall.update(pcd_gt, pcd_pred)
@@ -449,6 +451,7 @@ class DiffusionPoints(LightningModule):
         self.log('test/precision', pr, on_step=True)
         self.log('test/recall', re, on_step=True)
         self.log('test/fscore', f1, on_step=True)
+        
         print("cd_mean: ", cd_mean)
         print("cd_std: ", cd_std)
         print("precision: ", pr)
