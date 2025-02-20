@@ -12,11 +12,13 @@ class ShapeCompletionDataset():
                  split='train',
                  return_pcd = True,
                  return_rgbd = True,
+                 logger = None
                  ):
 
         assert return_pcd or return_rgbd, "return_pcd and return_rgbd are set to False. Set at least one to True"
 
         self.data_source = data_source
+        self.logger = logger
         self.split = split
         self.return_pcd = return_pcd
         self.return_rgbd = return_rgbd
@@ -166,42 +168,53 @@ class ShapeCompletionDataset():
         gt_pcd = self.get_gt(fid)
         input_data = self.get_rgbd(fid)
 
+        # Remove outliers from the partial point cloud
         partial_without_outliers, ind = input_data['pcd'].remove_statistical_outlier(nb_neighbors=200, std_ratio=2.0)
 
+        # Extract XYZ coordinates and RGB colors from the filtered point cloud
+        frame_pts = np.array(partial_without_outliers.points)  # XYZ coordinates
+        frame_rgb = np.array(partial_without_outliers.colors)  # RGB colors
+
+        # Combine XYZ and RGB into an Nx6 array
+        rgbd_pcd_ = np.concatenate((frame_pts, frame_rgb), axis=-1)
+
+        # # Update ground truth based on split
+        # if self.split != 'test':
+        #     gt_pcd = o3d.io.read_point_cloud(os.path.join(fid_root, 'gt/pcd/fruit.ply'))  # Load external ground truth
+        # else:
+        #     gt_pcd = partial_without_outliers  # Use partial point cloud as ground truth for test
+
+        # Align point cloud with RGB data and obtain an Nx6 array (aligned_output)
+        pointcloud_xyz = np.asarray(gt_pcd.points)
+        aligned_output, length_ = self.align_pointcloud_with_rgb(pointcloud_xyz, frame_pts, frame_rgb)
         
-        item = {
-            'groundtruth_pcd': gt_pcd
-            }
-
-
-        if self.return_pcd:
-            # item['rgbd_pcd'] = input_data['pcd'] #partial pointcloud
-            item['rgbd_pcd'] = partial_without_outliers#partial pointcloud
-
-        if self.return_rgbd:
-            item['rgbd_intrinsic'] = input_data['intrinsic']
-            item['rgbd_frames'] = input_data['frames']
-
+        # Convert aligned_output to Open3D format for exporting as .ply
+        aligned_pcd_o3d = o3d.geometry.PointCloud()
+        aligned_pcd_o3d.points = o3d.utility.Vector3dVector(aligned_output[:, :3])
+        aligned_pcd_o3d.colors = o3d.utility.Vector3dVector(aligned_output[:, 3:])
         ipdb.set_trace()
 
+        # Define directory for saving PLY files and ensure it exists
+        seq_dir = f'{self.logger.log_dir}/generated_pcd_Aggregated'
+        os.makedirs(seq_dir, exist_ok=True)
 
+        
 
-        #find best frames, compare wrt standard dev and mean 
-        #filter out 
-        #align
-        #return item same as for validation and testing 
-        #export testing/generated pcds for benchmark
-        return item
-    
+        # Save the point clouds with formatted filenames:
+        # 1. Ground Truth (non-colored or external GT)
+        o3d.io.write_point_cloud(f"{seq_dir}/{fid}_groundtruth.ply", gt_pcd)
+        # 2. Partial point cloud (RGBD outlier-free)
+        o3d.io.write_point_cloud(f"{seq_dir}/{fid}_rgbd.ply", partial_without_outliers)
+        # 3. Aligned colored partial point cloud (exported via Open3D, but kept as array in the returned item)
+        o3d.io.write_point_cloud(f"{seq_dir}/{fid}_aligned_rgbd.ply", aligned_pcd_o3d)
 
-        '''
-           item = {
-            # 'groundtruth_pcd':  gt_pcd,
-            'groundtruth_pcd':  rgbd_pcd_, #ground truth == partial pointcloud when doing test step with test dataloader
-            'rgbd_pcd': rgbd_pcd_,
-            'fruit_id': fruit_id,
-            'aligned_data': aligned_output,
+        # Return structured data
+        item = {
+            'groundtruth_pcd': gt_pcd,            # Original ground truth point cloud
+            'rgbd_pcd': partial_without_outliers,  # Partial RGBD point cloud (outliers removed)
+            'aligned_data': aligned_output,        # Aligned colored partial point cloud as an array (Nx6)
+            'fruit_id': fid,
             'aligned_data_length': length_
         }
 
-        '''
+        return item

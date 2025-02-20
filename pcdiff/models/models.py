@@ -389,7 +389,8 @@ class DiffusionPoints(LightningModule):
             )
             x_gen_eval = self.p_sample_loop(x_full, x_cond, x_uncond, gt_pts, batch['mean'], batch['std'], batch_idx)
             x_gen_eval = x_gen_eval.F.reshape((gt_pts.shape[0],-1,6)) #changed to 6
-     
+
+            # ipdb.set_trace()
             for i in range(len(batch['pcd_full'])):
 
                 pcd_pred = o3d.geometry.PointCloud()
@@ -410,8 +411,9 @@ class DiffusionPoints(LightningModule):
 
                 # ipdb.set_trace() #try saving aligned output
 
-                o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}_{batch['fruit_id']}_partial.ply", pcd_part)
-                o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}_{batch['fruit_id']}_gt.ply", pcd_gt)
+                #commented out for test set
+                # o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}_{batch['fruit_id']}_partial.ply", pcd_part)
+                # o3d.io.write_point_cloud(f"{seq_dir}/{batch_idx * self.hparams['train']['batch_size'] + i}_{batch['fruit_id']}_gt.ply", pcd_gt)
 
 
                 o3d.io.write_point_cloud(f"{seq_dir}/{batch['fruit_id']}.ply", pcd_pred)
@@ -442,7 +444,7 @@ class DiffusionPoints(LightningModule):
             #     self.chamfer_distance.update(pcd_gt, pcd_pred)
             #     self.precision_recall.update(pcd_gt, pcd_pred)
 
-
+        
         cd_mean, cd_std = self.chamfer_distance.compute()
         pr, re, f1 = self.precision_recall.compute_auc()
 

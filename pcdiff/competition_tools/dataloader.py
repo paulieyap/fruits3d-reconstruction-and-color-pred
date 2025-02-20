@@ -215,7 +215,7 @@ class ShapeCompletionDataset():
         frame_key = frameid.replace('png', '')
 
 
-        ipdb.set_trace()
+        # ipdb.set_trace()
         # Frame is the PCD_PART. Generate the point cloud from RGBD data
         frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
 

@@ -90,7 +90,7 @@ class FruitDataModule(LightningDataModule):
         loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
         print('Train samples: ', len(loader))
         '''
-        dataset = ShapeCompletionDataset(data_source=self.data_source, split='train')
+        dataset = ShapeCompletionDataset(data_source=self.data_source,logger = tb_logger, split='train')
         loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
 
         
