@@ -36,7 +36,7 @@ class FruitCollation:
         fruit_id = []
         mask=[]
         
-
+        ipdb.set_trace() 
         for sample in data:
             # ipdb.set_trace()
             # gt_np = np.asarray(sample['groundtruth_pcd'].points) #use this when using validation set
@@ -90,7 +90,7 @@ class FruitDataModule(LightningDataModule):
         loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
         print('Train samples: ', len(loader))
         '''
-        dataset = ShapeCompletionDataset(data_source=self.data_source,logger = tb_logger, split='train')
+        dataset = ShapeCompletionDataset(data_source=self.data_source, split='train')
         loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
 
         
@@ -113,7 +113,7 @@ class FruitDataModule(LightningDataModule):
         loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
         print('Test samples: ', len(loader))    
         '''
-        dataset = ShapeCompletionDataset(data_source=self.data_source, split ='test') 
+        dataset = ShapeCompletionDataset(data_source=self.data_source,split ='test') 
         loader = DataLoader(dataset, batch_size=1, num_workers=0, collate_fn=FruitCollation())
 
 

@@ -4,6 +4,7 @@ import open3d as o3d
 import numpy as np
 import cv2
 import ipdb
+from pytorch_lightning.loggers import TensorBoardLogger
 
 class ShapeCompletionDataset():
 
@@ -11,19 +12,25 @@ class ShapeCompletionDataset():
                  data_source=None,
                  split='train',
                  return_pcd = True,
-                 return_rgbd = True,
-                 logger = None
+                 return_rgbd = True
                  ):
 
         assert return_pcd or return_rgbd, "return_pcd and return_rgbd are set to False. Set at least one to True"
 
         self.data_source = data_source
-        self.logger = logger
         self.split = split
         self.return_pcd = return_pcd
         self.return_rgbd = return_rgbd
         
         self.fruit_list = self.get_file_paths()
+
+        # Initialize TensorBoard logger inside the dataset class
+        self.tb_logger = TensorBoardLogger("logs", name=f"ShapeCompletion_{split}")
+
+
+        # Log dataset size
+        self.tb_logger.experiment.add_text("Dataset Info", f"Loaded {len(self.fruit_list)} samples for {self.split} set.")
+
 
     def get_file_paths(self):
         fruit_list = {}
@@ -75,6 +82,7 @@ class ShapeCompletionDataset():
                 # #original below:
                 # frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
                 # rgbd_data['pcd'] += frame_pcd #aggregation of frames?
+            # ipdb.set_trace()
 
             rgbd_data['frames'][frame_key] = {
                 'rgb': rgb,
@@ -165,47 +173,38 @@ class ShapeCompletionDataset():
         keys = list(self.fruit_list.keys())
         fid = keys[idx]
         
-        gt_pcd = self.get_gt(fid)
         input_data = self.get_rgbd(fid)
 
         # Remove outliers from the partial point cloud
         partial_without_outliers, ind = input_data['pcd'].remove_statistical_outlier(nb_neighbors=200, std_ratio=2.0)
-
+        if self.split != 'test':
+            # gt_pcd = o3d.io.read_point_cloud(os.path.join(fid_root, 'gt/pcd/fruit.ply'))  # Load external ground truth
+            gt_pcd = self.get_gt(fid)
+        else:
+            gt_pcd = partial_without_outliers  # Use partial point cloud as ground truth for test
+        
+        
         # Extract XYZ coordinates and RGB colors from the filtered point cloud
         frame_pts = np.array(partial_without_outliers.points)  # XYZ coordinates
         frame_rgb = np.array(partial_without_outliers.colors)  # RGB colors
 
-        # Combine XYZ and RGB into an Nx6 array
         rgbd_pcd_ = np.concatenate((frame_pts, frame_rgb), axis=-1)
 
-        # # Update ground truth based on split
-        # if self.split != 'test':
-        #     gt_pcd = o3d.io.read_point_cloud(os.path.join(fid_root, 'gt/pcd/fruit.ply'))  # Load external ground truth
-        # else:
-        #     gt_pcd = partial_without_outliers  # Use partial point cloud as ground truth for test
-
-        # Align point cloud with RGB data and obtain an Nx6 array (aligned_output)
+    
         pointcloud_xyz = np.asarray(gt_pcd.points)
         aligned_output, length_ = self.align_pointcloud_with_rgb(pointcloud_xyz, frame_pts, frame_rgb)
         
-        # Convert aligned_output to Open3D format for exporting as .ply
         aligned_pcd_o3d = o3d.geometry.PointCloud()
         aligned_pcd_o3d.points = o3d.utility.Vector3dVector(aligned_output[:, :3])
         aligned_pcd_o3d.colors = o3d.utility.Vector3dVector(aligned_output[:, 3:])
-        ipdb.set_trace()
+
 
         # Define directory for saving PLY files and ensure it exists
-        seq_dir = f'{self.logger.log_dir}/generated_pcd_Aggregated'
+        seq_dir = 'generated_pcd_Aggregated'
         os.makedirs(seq_dir, exist_ok=True)
 
-        
-
-        # Save the point clouds with formatted filenames:
-        # 1. Ground Truth (non-colored or external GT)
         o3d.io.write_point_cloud(f"{seq_dir}/{fid}_groundtruth.ply", gt_pcd)
-        # 2. Partial point cloud (RGBD outlier-free)
         o3d.io.write_point_cloud(f"{seq_dir}/{fid}_rgbd.ply", partial_without_outliers)
-        # 3. Aligned colored partial point cloud (exported via Open3D, but kept as array in the returned item)
         o3d.io.write_point_cloud(f"{seq_dir}/{fid}_aligned_rgbd.ply", aligned_pcd_o3d)
 
         # Return structured data
