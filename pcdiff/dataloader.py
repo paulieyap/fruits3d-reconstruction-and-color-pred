@@ -56,24 +56,28 @@ class ShapeCompletionDataset():
 
     def p2p_icp(self, source, target, trans_init):
         threshold = self.hparams['train']['icp_threshold']
-        ipdb.set_trace()
+
         reg_p2p = o3d.pipelines.registration.registration_icp(source, target, threshold, trans_init,
                                     o3d.pipelines.registration.TransformationEstimationPointToPoint(),
                                     o3d.pipelines.registration.ICPConvergenceCriteria(self.hparams['train']['icp_convergence_max_iter']))
 
-        print(reg_p2p)
+
+        transformation = reg_p2p.transformation
+
         print("Transformation is:")
-        print(reg_p2p.transformation)
-        draw_registration_result(source, target, reg_p2p.transformation)
+        print(transformation)
 
-        return reg_p2p
-
-
-    def draw_registration_result(source, target, transformation):
         source_temp = copy.deepcopy(source)
         target_temp = copy.deepcopy(target)
-        # source_temp.paint_uniform_color([1, 0.706, 0])
-        # target_temp.paint_uniform_color([0, 0.651, 0.929])
+        source_temp.transform(transformation)
+        # self.draw_registration_result(source, target, reg_p2p.transformation)
+
+        return source_temp, transformation
+
+
+    def draw_registration_result(self,source, target, transformation):
+        source_temp = copy.deepcopy(source)
+        target_temp = copy.deepcopy(target)
         source_temp.transform(transformation)
         o3d.visualization.draw_geometries([source_temp, target_temp])
 
@@ -114,12 +118,14 @@ class ShapeCompletionDataset():
                 frame_pcd_outlierRemoved, ind = frame_pcd.remove_statistical_outlier(nb_neighbors=200, std_ratio=2.0)
 
                 #add ICP here
-                ipdb.set_trace()
+
 
                 if 'pcd' not in rgbd_data or len(rgbd_data['pcd'].points) == 0:
                     rgbd_data['pcd'] = frame_pcd_outlierRemoved
                 else:
-                    icp_transformation = self.p2p_icp(frame_pcd_outlierRemoved, rgbd_data['pcd'], pose)
+                    ipdb.set_trace()
+                    icp_transformation_pcd, icp_trans = self.p2p_icp(frame_pcd_outlierRemoved, rgbd_data['pcd'], np.eye(4))
+                    rgbd_data['pcd'] += icp_transformation_pcd
 
 
                 # rgbd_data['pcd'] += frame_pcd_outlierRemoved
@@ -220,7 +226,6 @@ class ShapeCompletionDataset():
         input_data = self.get_rgbd(fid)
 
         # Remove outliers from the partial point cloud
-        partial_without_outliers, ind = input_data['pcd'].remove_statistical_outlier(nb_neighbors=200, std_ratio=2.0)
         if self.split != 'test':
             # gt_pcd = o3d.io.read_point_cloud(os.path.join(fid_root, 'gt/pcd/fruit.ply'))  # Load external ground truth
             gt_pcd = self.get_gt(fid)
