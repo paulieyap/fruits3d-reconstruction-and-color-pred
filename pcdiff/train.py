@@ -14,7 +14,7 @@ import open3d as o3d
 import pcdiff.models.models as models
 from torch.utils.data import DataLoader
 # from pcdiff.competition_tools.dataloader import ShapeCompletionDataset
-from pcdiff.original_tools.dataloader import ShapeCompletionDataset
+from pcdiff.dataloader import ShapeCompletionDataset
 
 
 # from ipb_loaders.pointcloud.igg_fruit import IGGFruit
@@ -90,7 +90,7 @@ class FruitDataModule(LightningDataModule):
         loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
         print('Train samples: ', len(loader))
         '''
-        dataset = ShapeCompletionDataset(data_source=self.data_source, split='train')
+        dataset = ShapeCompletionDataset(hparams=cfg, data_source=self.data_source, split='train')
         loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
 
         
