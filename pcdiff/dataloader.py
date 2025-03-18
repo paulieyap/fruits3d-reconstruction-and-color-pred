@@ -84,6 +84,7 @@ class ShapeCompletionDataset():
 
 
     def get_rgbd(self, fid):
+        ipdb.set_trace()
         fid_root = self.fruit_list[fid]['path']
 
         intrinsic_path = os.path.join(fid_root,'input/intrinsic.json')
@@ -97,7 +98,7 @@ class ShapeCompletionDataset():
 
         frames = os.listdir(os.path.join(fid_root,'input/masks/'))
         for frameid in frames:
-            
+            ipdb.set_trace()
             pose_path = os.path.join(fid_root,'input/poses/',frameid.replace('png','txt'))
             pose = np.loadtxt(pose_path)
             
