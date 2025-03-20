@@ -84,7 +84,6 @@ class ShapeCompletionDataset():
 
 
     def get_rgbd(self, fid):
-        ipdb.set_trace()
         fid_root = self.fruit_list[fid]['path']
 
         intrinsic_path = os.path.join(fid_root,'input/intrinsic.json')
@@ -97,8 +96,9 @@ class ShapeCompletionDataset():
             }
 
         frames = os.listdir(os.path.join(fid_root,'input/masks/'))
+
+        
         for frameid in frames:
-            ipdb.set_trace()
             pose_path = os.path.join(fid_root,'input/poses/',frameid.replace('png','txt'))
             pose = np.loadtxt(pose_path)
             
@@ -119,7 +119,7 @@ class ShapeCompletionDataset():
                 frame_pcd_outlierRemoved, ind = frame_pcd.remove_statistical_outlier(nb_neighbors=200, std_ratio=2.0)
 
                 #add ICP here
-
+                '''
 
                 if 'pcd' not in rgbd_data or len(rgbd_data['pcd'].points) == 0:
                     rgbd_data['pcd'] = frame_pcd_outlierRemoved
@@ -128,12 +128,14 @@ class ShapeCompletionDataset():
                     icp_transformation_pcd, icp_trans = self.p2p_icp(frame_pcd_outlierRemoved, rgbd_data['pcd'], np.eye(4))
                     rgbd_data['pcd'] += icp_transformation_pcd
 
+                '''
+
+                #add calc of mean and std here? 
 
                 # rgbd_data['pcd'] += frame_pcd_outlierRemoved
                 # #original below:
-                # frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
-                # rgbd_data['pcd'] += frame_pcd #aggregation of frames?
-            # ipdb.set_trace()
+                frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
+                rgbd_data['pcd'] += frame_pcd #aggregation of frames
 
             rgbd_data['frames'][frame_key] = {
                 'rgb': rgb,
@@ -142,7 +144,6 @@ class ShapeCompletionDataset():
                 'pose': pose
             }
 
-        # ipdb.set_trace() 
 
         return rgbd_data
 
@@ -225,18 +226,23 @@ class ShapeCompletionDataset():
         fid = keys[idx]
         
         input_data = self.get_rgbd(fid)
+        partial_pcd = input_data['pcd']
+
+        # partial_without_outliers, ind = input_data['pcd'].remove_statistical_outlier(nb_neighbors=200, std_ratio=2.0)
+
 
         # Remove outliers from the partial point cloud
         if self.split != 'test':
             # gt_pcd = o3d.io.read_point_cloud(os.path.join(fid_root, 'gt/pcd/fruit.ply'))  # Load external ground truth
             gt_pcd = self.get_gt(fid)
         else:
-            gt_pcd = partial_without_outliers  # Use partial point cloud as ground truth for test
+            gt_pcd = partial_pcd#partial_without_outliers  # Use partial point cloud as ground truth for test
         
-        
+        #using input_data['pcd'] instead of partial without outliers, because if with ICP, we will already remove the outliers in get_rgbd. 
+
         # Extract XYZ coordinates and RGB colors from the filtered point cloud
-        frame_pts = np.array(partial_without_outliers.points)  # XYZ coordinates
-        frame_rgb = np.array(partial_without_outliers.colors)  # RGB colors
+        frame_pts = np.array(partial_pcd.points)  # XYZ coordinates
+        frame_rgb = np.array(partial_pcd.colors)  # RGB colors
 
         rgbd_pcd_ = np.concatenate((frame_pts, frame_rgb), axis=-1)
 
@@ -256,12 +262,11 @@ class ShapeCompletionDataset():
         # o3d.io.write_point_cloud(f"{seq_dir}/{fid}_groundtruth.ply", gt_pcd)
         # o3d.io.write_point_cloud(f"{seq_dir}/{fid}_rgbd.ply", partial_without_outliers)
         # o3d.io.write_point_cloud(f"{seq_dir}/{fid}_aligned_rgbd.ply", aligned_pcd_o3d)
-        ipdb.set_trace()
 
         # Return structured data
         item = {
             'groundtruth_pcd': gt_pcd,            # Original ground truth point cloud
-            'rgbd_pcd': partial_without_outliers,  # Partial RGBD point cloud (outliers removed)
+            'rgbd_pcd': partial_pcd,  # Partial RGBD point cloud (outliers removed)
             'aligned_data': aligned_output,        # Aligned colored partial point cloud as an array (Nx6)
             'fruit_id': fid,
             'aligned_data_length': length_
