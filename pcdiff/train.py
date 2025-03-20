@@ -36,23 +36,24 @@ class FruitCollation:
         fruit_id = []
         mask=[]
         
-        ipdb.set_trace() 
+
         for sample in data:
             # ipdb.set_trace()
+
+
             # gt_np = np.asarray(sample['groundtruth_pcd'].points) #use this when using validation set
             gt_np = sample['groundtruth_pcd']
             # part_np = np.asarray(sample['rgbd_pcd'].points)
-            part_np= sample['rgbd_pcd']
+            part_np= np.asarray(sample['rgbd_pcd'])
             fid = sample['fruit_id']
             aligned_data= sample['aligned_data']
             aligned_data_length = sample['aligned_data_length']
 
             aligned_xyz = aligned_data[:,:3]
             aligned_rgb = aligned_data[:,3:]
-
             # sparse = point_set_to_sparse(gt_np, part_np, 30000, 15000, 0.01)
             sparse = point_set_to_sparse(aligned_data, part_np, 30000, 15000, 0.01)
-
+            
 
             # Store the sparse components
             

@@ -84,6 +84,7 @@ class ShapeCompletionDataset():
 
 
     def get_rgbd(self, fid):
+        print("Fruit List:", self.fruit_list)
         fid_root = self.fruit_list[fid]['path']
 
         intrinsic_path = os.path.join(fid_root,'input/intrinsic.json')
@@ -260,13 +261,14 @@ class ShapeCompletionDataset():
         os.makedirs(seq_dir, exist_ok=True)
 
         # o3d.io.write_point_cloud(f"{seq_dir}/{fid}_groundtruth.ply", gt_pcd)
-        # o3d.io.write_point_cloud(f"{seq_dir}/{fid}_rgbd.ply", partial_without_outliers)
+        # o3d.io.write_point_cloud(f"{seq_dir}/{fid}_rgbd.ply", partial_pcd)
         # o3d.io.write_point_cloud(f"{seq_dir}/{fid}_aligned_rgbd.ply", aligned_pcd_o3d)
 
+        # ipdb.set_trace()
         # Return structured data
         item = {
             'groundtruth_pcd': gt_pcd,            # Original ground truth point cloud
-            'rgbd_pcd': partial_pcd,  # Partial RGBD point cloud (outliers removed)
+            'rgbd_pcd': rgbd_pcd_,  # Partial RGBD point cloud (outliers removed)
             'aligned_data': aligned_output,        # Aligned colored partial point cloud as an array (Nx6)
             'fruit_id': fid,
             'aligned_data_length': length_
