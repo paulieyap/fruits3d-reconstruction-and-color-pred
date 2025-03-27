@@ -38,8 +38,6 @@ class FruitCollation:
         
 
         for sample in data:
-            ipdb.set_trace()
-
 
             # gt_np = np.asarray(sample['groundtruth_pcd'].points) #use this when using validation set
             gt_np = sample['groundtruth_pcd']
@@ -189,8 +187,8 @@ def main(config, weights, checkpoint, test):
         print('TESTING MODE')
       
         # trainer.test(model, data)
-        trainer.test(model, data.test_dataloader()) #use to swtich between validation or test data
-        # trainer.test(model, data.val_dataloader())
+        # trainer.test(model, data.test_dataloader()) #use to swtich between validation or test data
+        trainer.test(model, data.val_dataloader())
     else:
         print('TRAINING MODE')
         
