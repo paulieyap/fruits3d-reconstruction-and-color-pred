@@ -54,6 +54,7 @@ class ShapeCompletionDataset():
         return o3d.io.read_point_cloud(os.path.join(self.fruit_list[fid]['path'],'gt/pcd/fruit.ply'))
 
 
+
     def p2p_icp(self, source, target, trans_init):
         threshold = self.hparams['train']['icp_threshold']
 
@@ -81,6 +82,35 @@ class ShapeCompletionDataset():
         source_temp.transform(transformation)
         o3d.visualization.draw_geometries([source_temp, target_temp])
 
+
+    def get_all_gt(self, keys):
+        all_means = []
+        all_stds = []
+       
+        # Iterate through the list of sweet peppers (keys)
+        for fid in keys:  # Assuming `keys` is a list of sweet peppers' ids
+            # Assuming the 'path' field in fruit_list points to the directory containing the 'gt/pcd/fruit.ply'
+            pcd_path = os.path.join(self.fruit_list[fid]['path'], 'gt/pcd/fruit.ply')
+            
+            if os.path.exists(pcd_path):  # Check if the file exists
+                pcd = o3d.io.read_point_cloud(pcd_path)
+                points = np.asarray(pcd.points)  # Convert Open3D point cloud to NumPy array
+                
+                # Compute mean and std for the current sweet pepper (point cloud)
+                mean = np.mean(points, axis=0)
+                std = np.std(points, axis=0)
+                
+                # Append the results to the lists
+                all_means.append(mean)
+                all_stds.append(std)
+            else:
+                print(f"Point cloud file {pcd_path} not found for sample {fid}. Skipping.")
+        ipdb.set_trace()
+        # Convert the lists of means and stds into arrays (if needed for later processing)
+        all_means = (np.array(all_means)).mean(axis=0)
+        all_stds = (np.array(all_stds)).std(axis=0)
+        
+        return all_means, all_stds
 
 
     def get_rgbd(self, fid):
@@ -234,8 +264,7 @@ class ShapeCompletionDataset():
 
     def __getitem__(self, idx):
         
-
-        keys = list(self.fruit_list.keys())
+        keys = list(self.fruit_list.keys()) #all sweet pepper keys in dataset
         fid = keys[idx]
         
         input_data = self.get_rgbd(fid)
@@ -247,7 +276,10 @@ class ShapeCompletionDataset():
         # Remove outliers from the partial point cloud
         if self.split != 'test':
             # gt_pcd = o3d.io.read_point_cloud(os.path.join(fid_root, 'gt/pcd/fruit.ply'))  # Load external ground truth
+
             gt_pcd = self.get_gt(fid)
+            # mean, std = self.get_all_gt(keys) #used to pre-compute mean adn std
+   
         else:
             gt_pcd = partial_pcd#partial_without_outliers  # Use partial point cloud as ground truth for test
         
@@ -262,7 +294,7 @@ class ShapeCompletionDataset():
 
         pointcloud_xyz = np.asarray(gt_pcd.points)
         aligned_output, length_ = self.align_pointcloud_with_rgb(pointcloud_xyz, frame_pts, frame_rgb)
-        
+    
         aligned_pcd_o3d = o3d.geometry.PointCloud()
         aligned_pcd_o3d.points = o3d.utility.Vector3dVector(aligned_output[:, :3])
         aligned_pcd_o3d.colors = o3d.utility.Vector3dVector(aligned_output[:, 3:])

@@ -6,7 +6,8 @@ import numpy as np
 import ipdb
 
 def feats_to_coord(p_feats, resolution, mean, std):
-    p_feats = unormalize_pcd(p_feats.reshape(mean.shape[0],-1,mean.shape[-1]), mean, std) #feats = is the shape of the last dimension of the mean
+    p_feats = unormalize_pcd(p_feats.reshape(mean.shape[0],-1,mean.shape[-1]), mean, std) 
+    #feats = is the shape of the last dimension of the mean
     p_coord = torch.round(p_feats / resolution)
     #p_coord -= p_coord.min(1, keepdim=True).values
 
@@ -32,10 +33,17 @@ def point_set_to_sparse(p_full, p_part, n_full, n_part, resolution): #replace p_
     
     # after creating the voxel coordinates we normalize the floating coordinates towards mean=0 and std=1
     #p_full = torch.cat((p_full, p_part), axis=0)
-    p_mean, p_std = p_full.mean(axis=0), p_full.std(axis=0)
+    #replace with pre-computed value
+    # p_mean, p_std = p_full.mean(axis=0), p_full.std(axis=0)
+    precomp_mean = np.array([-0.04177155,  0.03841237, -0.03472447,  0.39953194,  0.39472064,0.37596458])
+    precomp_std  = np.array([0.02371479, 0.01226978, 0.01996409, 0.15754811, 0.17013572,0.19951918])
+    p_mean, p_std = precomp_mean, precomp_std
+    
 
     
     p_full[:,:3] = normalize_pcd(p_full[:,:3], p_mean[:3], p_std[:3]) 
+
+    #no need to adjust mask even when we're using precomputed mean and std w.r.t. GT
     #create the mask
     mask = p_full[:,4] != -1 #-1 for all r g b 
     #normalize RGB where it's not (-1)
@@ -45,6 +53,8 @@ def point_set_to_sparse(p_full, p_part, n_full, n_part, resolution): #replace p_
 
 
     p_part = normalize_pcd(p_part, p_mean, p_std)
+    p_mean = torch.tensor(precomp_mean, dtype=torch.float32)
+    p_std = torch.tensor(precomp_std, dtype=torch.float32)
     
     # ipdb.set_trace()
     return [p_full, p_mean, p_std, p_part, mask]

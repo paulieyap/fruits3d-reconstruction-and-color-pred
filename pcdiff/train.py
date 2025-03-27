@@ -13,6 +13,7 @@ import open3d as o3d
 # import pcdiff.datasets.datasets as datasets
 import pcdiff.models.models as models
 from torch.utils.data import DataLoader
+# from pcdiff.compute import ComputeMeanStd
 # from pcdiff.competition_tools.dataloader import ShapeCompletionDataset
 from pcdiff.dataloader import ShapeCompletionDataset
 
@@ -36,12 +37,10 @@ class FruitCollation:
         fruit_id = []
         mask=[]
         
-
         for sample in data:
-
+            # part_np = np.asarray(sample['rgbd_pcd'].points)
             # gt_np = np.asarray(sample['groundtruth_pcd'].points) #use this when using validation set
             gt_np = sample['groundtruth_pcd']
-            # part_np = np.asarray(sample['rgbd_pcd'].points)
             part_np= np.asarray(sample['rgbd_pcd'])
             fid = sample['fruit_id']
             aligned_data= sample['aligned_data']
@@ -89,7 +88,7 @@ class FruitDataModule(LightningDataModule):
         loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
         print('Train samples: ', len(loader))
         '''
-        dataset = ShapeCompletionDataset(hparams=cfg, data_source=self.data_source, split='train')
+        dataset = ShapeCompletionDataset(data_source=self.data_source, split='train')
         loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
 
         
@@ -101,6 +100,7 @@ class FruitDataModule(LightningDataModule):
         loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
         print('Val samples: ', len(loader))
         '''
+
         dataset = ShapeCompletionDataset(data_source=self.data_source, split='val')#split='val'
         loader = DataLoader(dataset, batch_size=1, num_workers=0, collate_fn=FruitCollation())
 
@@ -187,8 +187,8 @@ def main(config, weights, checkpoint, test):
         print('TESTING MODE')
       
         # trainer.test(model, data)
-        # trainer.test(model, data.test_dataloader()) #use to swtich between validation or test data
-        trainer.test(model, data.val_dataloader())
+        trainer.test(model, data.test_dataloader()) #use to swtich between validation or test data
+        # trainer.test(model, data.val_dataloader())
     else:
         print('TRAINING MODE')
         
