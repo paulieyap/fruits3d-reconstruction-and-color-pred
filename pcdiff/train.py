@@ -38,7 +38,7 @@ class FruitCollation:
         
 
         for sample in data:
-            # ipdb.set_trace()
+            ipdb.set_trace()
 
 
             # gt_np = np.asarray(sample['groundtruth_pcd'].points) #use this when using validation set

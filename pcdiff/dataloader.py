@@ -116,30 +116,37 @@ class ShapeCompletionDataset():
             frame_key = frameid.replace('png','')
 
             if self.return_pcd:
+                valid_pcds = [] 
                 frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
                 frame_pcd_outlierRemoved, ind = frame_pcd.remove_statistical_outlier(nb_neighbors=200, std_ratio=2.0)
-                ipdb.set_trace()
                 #add calc of mean and std 
                 #Calculate- Calculating the Mean and Standard Deviation of the points
                 # - if the x-coordinate of the standard deviation is too high, drop/ignore this sweet pepper
                 # - “too bad” standard deviation used - 1 cm
-                # - Then apply ICP
 
+                points_array = np.asarray(frame_pcd_outlierRemoved.points)
+                mean_xyz = np.mean(points_array, axis=0)
+                std_xyz = np.std(points_array, axis=0)
 
-                mean_xyz = np.mean(np.asarray(frame_pcd_outlierRemoved.points), axis=0)
-                std_xyz = np.std(np.asarray(frame_pcd_outlierRemoved.points), axis=0)
+                print(f"Frame {frame_key} - Mean: {mean_xyz}, Std Dev: {std_xyz}")
 
-                if std_xyz[0] < 0.03:  # 1 cm threshold
-                    if 'pcd' not in rgbd_data or len(rgbd_data['pcd'].points) == 0:
-                        rgbd_data['pcd'] = frame_pcd_outlierRemoved
-                    else:
-                        ipdb.set_trace()
-                        icp_transformation_pcd, icp_trans = self.p2p_icp(frame_pcd_outlierRemoved, rgbd_data['pcd'], np.eye(4))
-                        rgbd_data['pcd'] += icp_transformation_pcd
+                if std_xyz[0] < self.hparams['train']['get_rgbd_thresh']:  # 3 cm threshold
+                    valid_pcds.append(frame_pcd_outlierRemoved)
                 else:
-                    print(f"skipping frame. x-coord std is: {std_xyz[0]}")
+                    print(f"Skipping frame {frame_key}. x-coord std is: {std_xyz[0]}")
 
-            ipdb.set_trace()
+
+                #accepted pcds are used if the list will contain an element
+            if valid_pcds:
+                rgbd_data['pcd'] = valid_pcds[0]  
+                for i in range(1, len(valid_pcds)):
+                    icp_transformation_pcd, icp_trans = self.p2p_icp(valid_pcds[i], rgbd_data['pcd'], np.eye(4))
+                    rgbd_data['pcd'] += icp_transformation_pcd
+            else:
+                rgbd_data['pcd'] += frame_pcd_outlierRemoved #just use the "ugly" pcd lol 
+                print("No valid point clouds found. Aggregation skipped.")
+
+
                 # original below:
                 # frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
                 # rgbd_data['pcd'] += frame_pcd #aggregation of frames
@@ -150,7 +157,6 @@ class ShapeCompletionDataset():
                 'mask': mask,
                 'pose': pose
             }
-
 
         return rgbd_data
 
@@ -270,7 +276,6 @@ class ShapeCompletionDataset():
         # o3d.io.write_point_cloud(f"{seq_dir}/{fid}_rgbd.ply", partial_pcd)
         # o3d.io.write_point_cloud(f"{seq_dir}/{fid}_aligned_rgbd.ply", aligned_pcd_o3d)
 
-        ipdb.set_trace()
 
         item = {
             'groundtruth_pcd': gt_pcd,            # Original ground truth point cloud

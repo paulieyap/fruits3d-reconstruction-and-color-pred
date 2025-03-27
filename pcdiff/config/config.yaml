@@ -20,6 +20,7 @@ train:
     rescale_strength: 0.7
     icp_convergence_max_iter: 1000
     icp_threshold: 0.01
+    get_rgbd_thresh: 0.03
     n_gpus: 1
     num_workers: 0
     max_epoch: 100
