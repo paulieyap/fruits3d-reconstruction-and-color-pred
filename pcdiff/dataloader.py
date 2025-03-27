@@ -84,7 +84,7 @@ class ShapeCompletionDataset():
 
 
     def get_rgbd(self, fid):
-        print("Fruit List:", self.fruit_list)
+        # print("Fruit List:", self.fruit_list)
         fid_root = self.fruit_list[fid]['path']
 
         intrinsic_path = os.path.join(fid_root,'input/intrinsic.json')
@@ -100,6 +100,7 @@ class ShapeCompletionDataset():
 
         
         for frameid in frames:
+            print("FRAMEID:", frameid)
             pose_path = os.path.join(fid_root,'input/poses/',frameid.replace('png','txt'))
             pose = np.loadtxt(pose_path)
             
@@ -115,28 +116,33 @@ class ShapeCompletionDataset():
             frame_key = frameid.replace('png','')
 
             if self.return_pcd:
-                # ipdb.set_trace()
                 frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
                 frame_pcd_outlierRemoved, ind = frame_pcd.remove_statistical_outlier(nb_neighbors=200, std_ratio=2.0)
+                ipdb.set_trace()
+                #add calc of mean and std 
+                #Calculate- Calculating the Mean and Standard Deviation of the points
+                # - if the x-coordinate of the standard deviation is too high, drop/ignore this sweet pepper
+                # - “too bad” standard deviation used - 1 cm
+                # - Then apply ICP
 
-                #add ICP here
-                '''
 
-                if 'pcd' not in rgbd_data or len(rgbd_data['pcd'].points) == 0:
-                    rgbd_data['pcd'] = frame_pcd_outlierRemoved
+                mean_xyz = np.mean(np.asarray(frame_pcd_outlierRemoved.points), axis=0)
+                std_xyz = np.std(np.asarray(frame_pcd_outlierRemoved.points), axis=0)
+
+                if std_xyz[0] < 0.03:  # 1 cm threshold
+                    if 'pcd' not in rgbd_data or len(rgbd_data['pcd'].points) == 0:
+                        rgbd_data['pcd'] = frame_pcd_outlierRemoved
+                    else:
+                        ipdb.set_trace()
+                        icp_transformation_pcd, icp_trans = self.p2p_icp(frame_pcd_outlierRemoved, rgbd_data['pcd'], np.eye(4))
+                        rgbd_data['pcd'] += icp_transformation_pcd
                 else:
-                    ipdb.set_trace()
-                    icp_transformation_pcd, icp_trans = self.p2p_icp(frame_pcd_outlierRemoved, rgbd_data['pcd'], np.eye(4))
-                    rgbd_data['pcd'] += icp_transformation_pcd
+                    print(f"skipping frame. x-coord std is: {std_xyz[0]}")
 
-                '''
-
-                #add calc of mean and std here? 
-
-                # rgbd_data['pcd'] += frame_pcd_outlierRemoved
-                # #original below:
-                frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
-                rgbd_data['pcd'] += frame_pcd #aggregation of frames
+            ipdb.set_trace()
+                # original below:
+                # frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
+                # rgbd_data['pcd'] += frame_pcd #aggregation of frames
 
             rgbd_data['frames'][frame_key] = {
                 'rgb': rgb,
@@ -247,7 +253,7 @@ class ShapeCompletionDataset():
 
         rgbd_pcd_ = np.concatenate((frame_pts, frame_rgb), axis=-1)
 
-    
+
         pointcloud_xyz = np.asarray(gt_pcd.points)
         aligned_output, length_ = self.align_pointcloud_with_rgb(pointcloud_xyz, frame_pts, frame_rgb)
         
@@ -264,8 +270,8 @@ class ShapeCompletionDataset():
         # o3d.io.write_point_cloud(f"{seq_dir}/{fid}_rgbd.ply", partial_pcd)
         # o3d.io.write_point_cloud(f"{seq_dir}/{fid}_aligned_rgbd.ply", aligned_pcd_o3d)
 
-        # ipdb.set_trace()
-        # Return structured data
+        ipdb.set_trace()
+
         item = {
             'groundtruth_pcd': gt_pcd,            # Original ground truth point cloud
             'rgbd_pcd': rgbd_pcd_,  # Partial RGBD point cloud (outliers removed)

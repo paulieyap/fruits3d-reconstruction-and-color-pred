@@ -394,13 +394,14 @@ class DiffusionPoints(LightningModule):
             for i in range(len(batch['pcd_full'])):
 
                 pcd_pred = o3d.geometry.PointCloud()
-
-                c_pred = unormalize_pcd(x_gen_eval, batch['mean'], batch['std'])[i].cpu().detach().numpy()
+                c_pred = x_gen_eval[i].cpu().detach().numpy() #using normalized
+                # c_pred = unormalize_pcd(x_gen_eval, batch['mean'], batch['std'])[i].cpu().detach().numpy()
                 pcd_pred.points = o3d.utility.Vector3dVector(c_pred[:,:3])
                 pcd_pred.colors = o3d.utility.Vector3dVector(c_pred[:,3:])
 
                 pcd_gt = o3d.geometry.PointCloud()
-                g_pred = unormalize_pcd(batch['pcd_full'], batch['mean'], batch['std'])[i].cpu().detach().numpy()
+                g_pred = batch['pcd_full'][i].cpu().detach().numpy()  #using normalized
+                # g_pred = unormalize_pcd(batch['pcd_full'], batch['mean'], batch['std'])[i].cpu().detach().numpy()
                 pcd_gt.points = o3d.utility.Vector3dVector(g_pred[:,:3]) 
                 pcd_gt.colors = o3d.utility.Vector3dVector(g_pred[:,3:])
 

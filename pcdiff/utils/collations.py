@@ -19,7 +19,7 @@ def unormalize_pcd(points, mean, std):
     return (points * std[:,None,:]) + mean[:,None,:] if len(mean.shape) == 2 else (points * std) + mean
 
 def point_set_to_sparse(p_full, p_part, n_full, n_part, resolution): #replace p_full with rgbd
-    # ipdb.set_trace()
+    ipdb.set_trace()
     concat_full = np.ceil(n_full / p_full.shape[0])
     concat_part = np.ceil(n_part / p_part.shape[0])
 
