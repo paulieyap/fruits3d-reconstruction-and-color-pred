@@ -1,0 +1,44 @@
+experiment:
+    id: Plants_ClassFree
+
+##Data
+data:
+    data_dir: './SweetPepper'
+    fruit_dir: './data/shape_completion_challenge' # root with train/ and test/ splits
+    resolution: 0.001
+    dataloader: 'KITTI'
+    split: 'train'
+    train: [ '00', '01', '02', '03', '04', '05', '06', '07', '09', '10' ]
+    validation: [ '08' ]
+    test: ['11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21']
+    scan_window: 12
+    num_points: 120000
+
+##Training
+train:
+    uncond_prob: 0.1
+    uncond_w: 2 #unconditional weight #not used during training 
+    rescale_strength: 0.7
+    icp_convergence_max_iter: 1000
+    icp_threshold: 0.01
+    get_rgbd_thresh: 0.03
+    n_gpus: 1
+    num_workers: 0
+    max_epoch: 100
+    lr: 0.0001
+    batch_size: 8
+    decay_lr: 1.0e-4
+
+diff:
+    beta_start: 0.0001
+    beta_end: 0.02
+    beta_func: 'linear'
+    t_steps: 1000
+    s_steps: 1000
+
+chamfer:
+    compute: True #False 
+
+##Network
+model:
+    out_dim: 96

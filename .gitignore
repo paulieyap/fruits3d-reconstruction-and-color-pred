@@ -1,0 +1,124 @@
+# ---------------------------------------------------------------
+# Secrets / credentials
+# ---------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.env
+secrets.*
+credentials*.json
+*.pem
+*.key
+*.p12
+id_rsa*
+.netrc
+wandb/settings
+.comet.config
+
+# ---------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.conda/
+
+# ---------------------------------------------------------------
+# ML experiments / checkpoints / logs
+# ---------------------------------------------------------------
+experiments/
+lightning_logs/
+wandb/
+mlruns/
+runs/
+outputs/
+multirun/
+logs/
+*.ckpt
+*.pth
+*.pt
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+*.onnx
+*.safetensors
+*.npy
+*.npz
+*.tfevents.*
+events.out.tfevents.*
+
+# ---------------------------------------------------------------
+# Datasets / point clouds / meshes / large media
+# ---------------------------------------------------------------
+data/
+datasets_raw/
+*.ply
+*.pcd
+*.bin
+*.label
+*.las
+*.laz
+*.obj
+*.stl
+*.xyz
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+*.mp4
+*.avi
+*.mov
+
+# ---------------------------------------------------------------
+# LaTeX build artifacts (thesis / task description)
+# ---------------------------------------------------------------
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+*.nav
+*.snm
+
+# ---------------------------------------------------------------
+# Editors / OS
+# ---------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Cluster job output (SLURM etc.)
+slurm-*.out
+*.err
+nohup.out
