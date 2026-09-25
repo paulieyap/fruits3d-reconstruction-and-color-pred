@@ -1,4 +1,4 @@
-# Install torch 1.9.0+cu111 and MinkowskiEngine 0.5.4 first (see README).
+# Installed on top of torch 1.9.0+cu111 and MinkowskiEngine (see Dockerfile).
 numpy==1.23.5
 scipy==1.10.1
 pytorch_lightning==1.5.10

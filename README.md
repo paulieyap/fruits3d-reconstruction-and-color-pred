@@ -37,31 +37,57 @@ differ from `ipb_loaders`.
 
 ## Installation
 
-Install torch with CUDA 11.1:
+### Docker (recommended)
+
+The Docker image pins the full environment used for the thesis (Python 3.8,
+CUDA 11.1, torch 1.9.0, MinkowskiEngine 0.5.4, PyTorch Lightning 1.5.10), so
+nothing has to match your local CUDA toolkit, compiler or Python version.
+
+Requirements on the host:
+
+- an NVIDIA GPU (the code runs on CUDA only) with driver >= 455
+- [Docker](https://docs.docker.com/engine/install/) and the
+  [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+
+MinkowskiEngine is compiled for Pascal to Ampere GPUs (compute capability
+6.0-8.6) plus PTX, so newer GPUs such as RTX 40xx also work.
+
+Build the image (takes ~20-30 min, mostly compiling MinkowskiEngine):
 
 ```bash
-pip3 install torch==1.9.0+cu111 torchvision==0.10.0 -f https://download.pytorch.org/whl/torch_stable.html
+docker build -t pcdiff:cu111 .
 ```
 
-Install MinkowskiEngine from source:
+Start a container with the repo and your dataset mounted:
 
 ```bash
-pip3 install -U git+https://github.com/NVIDIA/MinkowskiEngine --no-deps
+docker run --gpus all -it --rm --shm-size=8g \
+    -v "$(pwd)":/workspace \
+    -v /path/to/shape_completion_challenge:/workspace/pcdiff/data/shape_completion_challenge \
+    pcdiff:cu111
 ```
 
-Install the remaining packages and this repo:
+The container starts in `/workspace/pcdiff`, so the commands in
+[Training](#training) and [Inference](#inference) work as they are. Outputs
+(`experiments/`, `results/`) are written into the mounted repo.
+
+### Manual installation
+
+Only if you can't use Docker. You need Python 3.8 and a CUDA 11.1 toolkit
+matching the torch build:
 
 ```bash
+pip3 install torch==1.9.0+cu111 torchvision==0.10.0+cu111 -f https://download.pytorch.org/whl/torch_stable.html
+pip3 install numpy==1.23.5
+pip3 install -U git+https://github.com/NVIDIA/MinkowskiEngine@v0.5.4 --no-deps
 pip3 install -r requirements.txt
 pip3 install -U -e .
 ```
 
-`open3d`, `pytorch_lightning` (1.5.x) and `pytorch3d` are also needed
-(they are commented out in `requirements.txt`).
-
 ## Data
 
-Set the dataset root in `pcdiff/config/config.yaml`:
+Set the dataset root in `pcdiff/config/config.yaml` (the default matches the
+Docker mount above):
 
 ```yaml
 data:
