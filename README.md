@@ -111,4 +111,5 @@ Trained checkpoints are not included in this repo.
 ## License
 
 MIT, see [LICENSE](LICENSE). Parts of the code are adapted from
-[LiDiff](https://github.com/PRBonn/LiDiff) (MIT, (c) 2024 Photogrammetry & Robotics Bonn).
+[LiDiff](https://github.com/PRBonn/LiDiff) (MIT, (c) 2024 Photogrammetry & Robotics Bonn),
+see [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES).

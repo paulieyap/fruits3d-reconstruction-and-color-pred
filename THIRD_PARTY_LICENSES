@@ -1,6 +1,9 @@
+This project contains code adapted from LiDiff
+(https://github.com/PRBonn/LiDiff), released under the following license:
+
 MIT License
 
-Copyright (c) 2024-2025 Paulie Yap
+Copyright (c) 2024 Photogrammetry & Robotics Bonn
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
