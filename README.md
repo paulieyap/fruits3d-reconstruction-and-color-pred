@@ -3,6 +3,8 @@
 Code from my Master's thesis: diffusion-based 3D shape completion of fruits
 (sweet pepper) from partial RGB-D observations.
 
+Paper: [Fruits 3D Reconstruction and RGB Prediction for Agricultural Robotics with Diffusion Models](https://www.researchgate.net/publication/396007635_Fruits_3D_Reconstruction_and_RGB_Prediction_for_Agricultural_Robotics_with_Diffusion_Models)
+
 The diffusion pipeline is adapted from
 [LiDiff](https://github.com/PRBonn/LiDiff) (Nunes et al., CVPR 2024,
 *Scaling Diffusion Models to Real-World 3D LiDAR Scene Completion*).
@@ -107,6 +109,18 @@ python3 tools/diff_completion_pipeline.py --diff CHECKPOINT_PATH -T DENOISING_ST
 ```
 
 Trained checkpoints are not included in this repo.
+
+## Citation
+
+If you use this code, please cite:
+
+```bibtex
+@misc{yap_fruits3d,
+  title        = {Fruits 3D Reconstruction and RGB Prediction for Agricultural Robotics with Diffusion Models},
+  author       = {Yap, Paulie and others},
+  howpublished = {\url{https://www.researchgate.net/publication/396007635_Fruits_3D_Reconstruction_and_RGB_Prediction_for_Agricultural_Robotics_with_Diffusion_Models}},
+}
+```
 
 ## License
 
