@@ -107,3 +107,8 @@ python3 tools/diff_completion_pipeline.py --diff CHECKPOINT_PATH -T DENOISING_ST
 ```
 
 Trained checkpoints are not included in this repo.
+
+## License
+
+MIT, see [LICENSE](LICENSE). Parts of the code are adapted from
+[LiDiff](https://github.com/PRBonn/LiDiff) (MIT, (c) 2024 Photogrammetry & Robotics Bonn).
