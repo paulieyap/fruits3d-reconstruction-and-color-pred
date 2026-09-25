@@ -1,12 +1,10 @@
-# Fruit 3D Shape Completion with Diffusion (pcdiff)
+# Fruit 3D Shape Completion with DDPMS
 
-Code from my Master's thesis: diffusion-based 3D shape completion of fruits
-(sweet pepper) from partial RGB-D observations.
+Code from my Master's thesis: diffusion-based 3D shape completion of fruits (sweet pepper) from partial RGB-D observations.
 
 Paper: [Fruits 3D Reconstruction and RGB Prediction for Agricultural Robotics with Diffusion Models](https://www.researchgate.net/publication/396007635_Fruits_3D_Reconstruction_and_RGB_Prediction_for_Agricultural_Robotics_with_Diffusion_Models)
 
-The diffusion pipeline is adapted from
-[LiDiff](https://github.com/PRBonn/LiDiff) (Nunes et al., CVPR 2024,
+The diffusion pipeline is adapted from  [LiDiff](https://github.com/PRBonn/LiDiff) (Nunes et al., CVPR 2024,
 *Scaling Diffusion Models to Real-World 3D LiDAR Scene Completion*).
 
 ## `ipb_loaders` replacement
