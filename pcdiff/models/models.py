@@ -8,7 +8,6 @@ import open3d as o3d
 from pcdiff.utils.scheduling import beta_func
 from tqdm import tqdm
 from os import makedirs
-import ipdb
 
 from pytorch_lightning.core.lightning import LightningModule
 from pytorch_lightning import LightningDataModule

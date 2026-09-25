@@ -88,18 +88,17 @@ python3 train.py -w experiments/Plants_ClassFree/default/version_0/checkpoints/l
 
 ## Inference
 
-The completion pipeline:
+Complete every fruit of a split with a trained checkpoint (from `pcdiff/`):
 
 ```bash
 python3 tools/diff_completion_pipeline.py --diff CHECKPOINT_PATH -T DENOISING_STEPS -s CONDITIONING_WEIGHT --data DATA_ROOT
 ```
 
+The completed XYZRGB point clouds are written to
+`results/<checkpoint>_T<steps>_s<weight>/diff/<fruit_id>.ply`. Use `--split`
+to pick a split (default `test`) and `--vis` to view each result. The
+checkpoint folder must contain the `hparams.yaml` written during training.
 Trained checkpoints are not included in this repo.
-
-> [!NOTE]
-> `diff_completion_pipeline.py` still builds the older 3-channel (XYZ-only)
-> networks, while the final model in `models/models.py` uses 6 channels
-> (XYZRGB). The pipeline needs updating before it can load current checkpoints.
 
 ## Citation
 

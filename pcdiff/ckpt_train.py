@@ -8,7 +8,6 @@ from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 import yaml
 import numpy as np
 import torch
-import ipdb
 import open3d as o3d 
 # import pcdiff.datasets.datasets as datasets
 import pcdiff.models.models as models

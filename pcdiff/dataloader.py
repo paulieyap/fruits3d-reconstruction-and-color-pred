@@ -3,7 +3,6 @@ import json
 import open3d as o3d
 import numpy as np
 import cv2
-import ipdb
 from pytorch_lightning.loggers import TensorBoardLogger
 import copy
 import pickle
@@ -105,7 +104,6 @@ class ShapeCompletionDataset():
                 all_stds.append(std)
             else:
                 print(f"Point cloud file {pcd_path} not found for sample {fid}. Skipping.")
-        ipdb.set_trace()
         # Convert the lists of means and stds into arrays (if needed for later processing)
         all_means = (np.array(all_means)).mean(axis=0)
         all_stds = (np.array(all_stds)).std(axis=0)

@@ -172,7 +172,6 @@ def clusterize_pcd(points, ground):
     return labels
 
 def point_set_to_coord_feats(point_set, labels, resolution, num_points, deterministic=False):
-    import ipdb; ipdb.set_trace()
     p_feats = point_set.copy()
     p_coord = np.round(point_set[:, :3] / resolution)
     p_coord -= p_coord.min(0, keepdims=1)

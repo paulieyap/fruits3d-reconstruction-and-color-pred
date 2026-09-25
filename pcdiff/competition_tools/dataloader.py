@@ -3,7 +3,6 @@ import json
 import open3d as o3d
 import numpy as np
 import cv2
-import ipdb
 
 
 class ShapeCompletionDataset():
@@ -268,7 +267,6 @@ class ShapeCompletionDataset():
 
     def __getitem__(self,idx):
 
-        ipdb.set_trace()
         print("IDX: ", idx)
         frameid,fid_root = self.fruit_list[idx]
         fruit_id = self.fruit_id[idx][0]

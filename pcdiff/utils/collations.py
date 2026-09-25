@@ -3,7 +3,6 @@ import MinkowskiEngine as ME
 import torch
 import torch.nn.functional as F
 import numpy as np
-import ipdb
 
 def feats_to_coord(p_feats, resolution, mean, std):
     p_feats = unormalize_pcd(p_feats.reshape(mean.shape[0],-1,mean.shape[-1]), mean, std) 
