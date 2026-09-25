@@ -32,6 +32,12 @@ RUN pip install numpy==1.23.5 \
 COPY docker/requirements-docker.txt /tmp/requirements-docker.txt
 RUN pip install -r /tmp/requirements-docker.txt
 
+# cuSPARSE from CUDA 11.1 fails on Ada GPUs (RTX 40xx, compute capability
+# 8.9) with "cusparseCreate: operation not supported". MinkowskiEngine loads
+# cuSPARSE dynamically, so use the drop-in CUDA 11.8 build (same soname).
+RUN pip install nvidia-cusparse-cu11==11.7.5.86
+ENV LD_LIBRARY_PATH=/usr/local/lib/python3.8/dist-packages/nvidia/cusparse/lib:${LD_LIBRARY_PATH}
+
 # The code is mounted at /workspace at runtime; train.py calls git.
 RUN git config --system --add safe.directory '*'
 ENV PYTHONPATH=/workspace

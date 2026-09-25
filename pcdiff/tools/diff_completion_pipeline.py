@@ -97,7 +97,7 @@ def main(diff, denoising_steps, cond_weight, data, split, vis):
     with open(f'./results/{exp_dir}/exp_config.yaml', 'w+') as exp_config:
         yaml.dump(dict(diff_completion.hparams), exp_config)
 
-    loader = DataLoader(IGGFruit(data_source=data, split=split), batch_size=1, num_workers=4, collate_fn=FruitCollation())
+    loader = DataLoader(IGGFruit(data_source=data, split=split), batch_size=1, num_workers=0, collate_fn=FruitCollation())
 
     for batch in tqdm.tqdm(loader):
         completed = diff_completion.complete(batch)

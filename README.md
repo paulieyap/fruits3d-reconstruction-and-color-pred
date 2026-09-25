@@ -47,8 +47,9 @@ Requirements on the host:
 - [Docker](https://docs.docker.com/engine/install/) and the
   [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
 
-MinkowskiEngine is compiled for Pascal to Ampere GPUs (compute capability
-6.0-8.6) plus PTX, so newer GPUs such as RTX 40xx also work.
+MinkowskiEngine is compiled for compute capability 6.0-8.6 plus PTX, and the
+image ships the CUDA 11.8 cuSPARSE library (CUDA 11.1's version fails on Ada
+GPUs), so it runs on GTX 10xx through RTX 30xx/40xx. Tested on an RTX 2000 Ada.
 
 Build the image (takes ~20-30 min, mostly compiling MinkowskiEngine):
 
@@ -60,6 +61,7 @@ Start a container with the repo and your dataset mounted:
 
 ```bash
 docker run --gpus all -it --rm --shm-size=8g \
+    --user "$(id -u):$(id -g)" -e HOME=/tmp \
     -v "$(pwd)":/workspace \
     -v /path/to/shape_completion_challenge:/workspace/pcdiff/data/shape_completion_challenge \
     pcdiff:cu111
@@ -67,7 +69,9 @@ docker run --gpus all -it --rm --shm-size=8g \
 
 The container starts in `/workspace/pcdiff`, so the commands in
 [Training](#training) and [Inference](#inference) work as they are. Outputs
-(`experiments/`, `results/`) are written into the mounted repo.
+(`experiments/`, `results/`) are written into the mounted repo and owned by
+your user (`--user`). `--vis` needs a display and does not work in the
+container as-is.
 
 ### Manual installation
 
