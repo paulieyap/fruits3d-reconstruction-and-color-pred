@@ -9,45 +9,31 @@ The diffusion pipeline is adapted from
 [LiDiff](https://github.com/PRBonn/LiDiff) (Nunes et al., CVPR 2024,
 *Scaling Diffusion Models to Real-World 3D LiDAR Scene Completion*).
 
-> [!WARNING]
-> **Status: not runnable out of the box.** The code depends on the
-> university-lab-internal package `ipb_loaders`, which is not publicly
-> available. See [Missing dependency: `ipb_loaders`](#missing-dependency-ipb_loaders).
+## `ipb_loaders` replacement
 
-## Missing dependency: `ipb_loaders`
+The original code depended on `ipb_loaders`, a dataloader library internal to
+the IPB lab (University of Bonn) that is not publicly available.
+`pcdiff/datasets/igg_fruit.py` re-implements the `IGGFruit` dataset it provided,
+so this repo no longer needs `ipb_loaders`.
 
-`ipb_loaders` was a dataloader library developed internally at the IPB lab
-(University of Bonn). It is **not** included in this repository and is not on
-PyPI.
-
-Where it is used:
-
-| File | Usage |
-| --- | --- |
-| `pcdiff/tools/diff_completion_pipeline.py` | `from ipb_loaders.pointcloud.igg_fruit import IGGFruit` (required) |
-| `pcdiff/train.py`, `pcdiff/ckpt_train.py` | `IGGFruit` imports, commented out (not required) |
-
-Training does **not** need `ipb_loaders`: `train.py` uses
-`pcdiff/dataloader.py` and `ckpt_train.py` uses
-`pcdiff/competition_tools/dataloader.py` (both `ShapeCompletionDataset`).
-
-**TODO:** re-implement the `IGGFruit` dataset loader (point cloud / RGB-D
-loading for the IGG fruit dataset) inside this repo so
-`diff_completion_pipeline.py` works without the lab package.
-
-If you have access to `ipb_loaders`, one fix is needed for newer PyTorch
-versions. In `ipb_loaders/ipb_base.py`, change
+`IGGFruit(data_source, split='train', precomputed_augmentation=None, fuse_frames=True)`
+reads the public shape completion challenge layout (see [Data](#data)) and
+returns samples of the form:
 
 ```python
-from torch.utils.data import Dataset, default_collate
+{
+    'points': partial,           # (N, 6) XYZRGB, fused from the RGB-D frames
+    'extra': {
+        'gt_points': gt,         # (M, 6) XYZ + RGB transferred from the partial scan, -1 = no color
+        'fruit_id': 'lab1',
+    },
+}
 ```
 
-to
-
-```python
-from torch.utils.data import Dataset
-from torch.utils.data.dataloader import default_collate
-```
+For the test split (no ground truth), `gt_points` falls back to the partial
+observation. This is a re-implementation from how the code used the original
+loader, so details (e.g. preprocessing of the original IGG fruit data) may
+differ from `ipb_loaders`.
 
 ## Installation
 
@@ -102,13 +88,18 @@ python3 train.py -w experiments/Plants_ClassFree/default/version_0/checkpoints/l
 
 ## Inference
 
-The completion pipeline (requires `ipb_loaders`, see above):
+The completion pipeline:
 
 ```bash
-python3 tools/diff_completion_pipeline.py --diff CHECKPOINT_PATH -T DENOISING_STEPS -s CONDITIONING_WEIGHT
+python3 tools/diff_completion_pipeline.py --diff CHECKPOINT_PATH -T DENOISING_STEPS -s CONDITIONING_WEIGHT --data DATA_ROOT
 ```
 
 Trained checkpoints are not included in this repo.
+
+> [!NOTE]
+> `diff_completion_pipeline.py` still builds the older 3-channel (XYZ-only)
+> networks, while the final model in `models/models.py` uses 6 channels
+> (XYZRGB). The pipeline needs updating before it can load current checkpoints.
 
 ## Citation
 

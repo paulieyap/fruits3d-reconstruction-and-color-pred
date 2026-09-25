@@ -11,3 +11,4 @@ natsort==8.1.0
 joblib==1.1.1
 pykeops==2.1.2
 diffusers==0.18.0
+scipy

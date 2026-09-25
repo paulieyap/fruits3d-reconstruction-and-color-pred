@@ -9,7 +9,7 @@ import yaml
 import os
 import tqdm
 from natsort import natsorted
-from ipb_loaders.pointcloud.igg_fruit import IGGFruit
+from pcdiff.datasets.igg_fruit import IGGFruit
 import click
 import time
 from pytorch_lightning import LightningDataModule
@@ -184,19 +184,19 @@ class FruitDataModule(LightningDataModule):
         self.data_source = data_source
 
     def train_dataloader(self):
-        dataset = IGGFruit(data_source='/mnt/igg_fruit/processed/SweetPepper', precomputed_augmentation='/mnt/igg_fruit/processed/SweetPepper3')
+        dataset = IGGFruit(data_source=self.data_source)
         loader = DataLoader(dataset, batch_size=4, num_workers=4, collate_fn=FruitCollation())
 
         return loader
 
     def val_dataloader(self):
-        dataset = IGGFruit(data_source='/mnt/igg_fruit/processed/SweetPepper', split='test')
+        dataset = IGGFruit(data_source=self.data_source, split='test')
         loader = DataLoader(dataset, batch_size=1, num_workers=4, collate_fn=FruitCollation())
 
         return loader
 
     def test_dataloader(self):
-        dataset = IGGFruit(data_source='/mnt/igg_fruit/processed/SweetPepper', split='test')
+        dataset = IGGFruit(data_source=self.data_source, split='test')
         loader = DataLoader(dataset, batch_size=1, num_workers=4, collate_fn=FruitCollation())
 
         return loader
@@ -207,14 +207,15 @@ class FruitDataModule(LightningDataModule):
 @click.option('--denoising_steps', '-T', type=int, default=50, help='number of denoising steps (default: 50)')
 @click.option('--cond_weight', '-s', type=float, default=6.0, help='conditioning weight (default: 6.0)')
 @click.option('--vis', is_flag=True, help="Visualize diffusion process.")
-def main(diff, denoising_steps, cond_weight, vis):
+@click.option('--data', type=str, default='./data/shape_completion_challenge', help='dataset root with train/ and test/ splits')
+def main(diff, denoising_steps, cond_weight, vis, data):
     exp_dir = diff.split('/')[-1].split('.')[0].replace('=','') + f'_T{denoising_steps}_s{cond_weight}'
 
     diff_completion = DiffCompletion(
             diff, denoising_steps, cond_weight, vis
         )
 
-    data = FruitDataModule('/mnt/igg_fruit/processed/SweetPepper').test_dataloader()
+    data = FruitDataModule(data).test_dataloader()
 
     os.makedirs(f'./results/{exp_dir}/diff', exist_ok=True)
 
