@@ -12,7 +12,7 @@ then not needed anymore).
 import contextlib
 import io
 import os
-from multiprocessing import Pool
+import multiprocessing
 
 import click
 
@@ -47,7 +47,8 @@ def main(data_root, cache_dir, splits, workers):
         n = len(os.listdir(os.path.join(data_root, split)))
         jobs += [(data_root, cache_dir, split, i) for i in range(n)]
 
-    with Pool(workers) as pool:
+    # spawn, not fork: forking after torch/open3d have started their thread pools deadlocks the workers
+    with multiprocessing.get_context('spawn').Pool(workers) as pool:
         for k, (split, fid) in enumerate(pool.imap_unordered(build, jobs), 1):
             print(f'[{k}/{len(jobs)}] {split}/{fid}', flush=True)
 
