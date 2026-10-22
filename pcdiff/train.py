@@ -22,9 +22,12 @@ from pcdiff.dataloader import ShapeCompletionDataset
 from pcdiff.utils.collations import point_set_to_sparse
 
 class FruitCollation:
-    def __init__(self, norm=(None, None)):
+    def __init__(self, norm=(None, None), recentre=None):
         # (mean, std) of XYZRGB for point_set_to_sparse; (None, None) = thesis statistics
         self.norm_mean, self.norm_std = norm
+        # 'partial': shift each sample so its partial observation's centroid is the origin (no fruit-centred
+        # frame at deployment); None keeps the dataset frame
+        self.recentre = recentre
 
     def __call__(self, data):
         # print('entering fit')
@@ -45,6 +48,13 @@ class FruitCollation:
             fid = sample['fruit_id']
             aligned_data= sample['aligned_data']
             aligned_data_length = sample['aligned_data_length']
+
+            if self.recentre == 'partial':
+                offset = part_np[:, :3].mean(0)
+                part_np = part_np.copy()
+                part_np[:, :3] -= offset
+                aligned_data = aligned_data.copy()
+                aligned_data[:, :3] -= offset
 
             aligned_xyz = aligned_data[:,:3]
             aligned_rgb = aligned_data[:,3:]
@@ -79,9 +89,10 @@ class FruitCollation:
 
 
 class FruitDataModule(LightningDataModule):
-    def __init__(self, data_source, batch_size=8, num_workers=0, cache_dir=None, norm=(None, None)):
+    def __init__(self, data_source, batch_size=8, num_workers=0, cache_dir=None, norm=(None, None), recentre=None):
         super().__init__()
         self.norm = norm
+        self.recentre = recentre
         self.data_source = data_source
         self.cache_dir = cache_dir
         self.batch_size = batch_size
@@ -90,12 +101,12 @@ class FruitDataModule(LightningDataModule):
     def train_dataloader(self):
         '''
         dataset = IGGFruit(data_source=self.data_source)#, precomputed_augmentation='/mnt/igg_fruit/processed/SweetPepper3')
-        loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation(self.norm))
+        loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation(self.norm, self.recentre))
         print('Train samples: ', len(loader))
         '''
         dataset = ShapeCompletionDataset(data_source=self.data_source, split='train', cache_dir=self.cache_dir)
         loader = DataLoader(dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True,
-                            collate_fn=FruitCollation(self.norm), persistent_workers=self.num_workers > 0)
+                            collate_fn=FruitCollation(self.norm, self.recentre), persistent_workers=self.num_workers > 0)
 
         
         return loader
@@ -103,23 +114,23 @@ class FruitDataModule(LightningDataModule):
     def val_dataloader(self):
         '''
         dataset = IGGFruit(data_source=self.data_source)#split='val'
-        loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation(self.norm))
+        loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation(self.norm, self.recentre))
         print('Val samples: ', len(loader))
         '''
 
         dataset = ShapeCompletionDataset(data_source=self.data_source, split='val', cache_dir=self.cache_dir)#split='val'
-        loader = DataLoader(dataset, batch_size=1, num_workers=self.num_workers, collate_fn=FruitCollation(self.norm))
+        loader = DataLoader(dataset, batch_size=1, num_workers=self.num_workers, collate_fn=FruitCollation(self.norm, self.recentre))
 
         return loader
 
     def test_dataloader(self):
         '''
         dataset = IGGFruit(data_source=self.data_source) # split='train'
-        loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation(self.norm))
+        loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation(self.norm, self.recentre))
         print('Test samples: ', len(loader))    
         '''
         dataset = ShapeCompletionDataset(data_source=self.data_source, split='test', cache_dir=self.cache_dir) 
-        loader = DataLoader(dataset, batch_size=1, num_workers=self.num_workers, collate_fn=FruitCollation(self.norm))
+        loader = DataLoader(dataset, batch_size=1, num_workers=self.num_workers, collate_fn=FruitCollation(self.norm, self.recentre))
 
 
         return loader
@@ -156,7 +167,8 @@ def main(config, weights, checkpoint, test):
 
 
     data = FruitDataModule(cfg['data']['fruit_dir'], cfg['train']['batch_size'], cfg['train']['num_workers'],
-                           cfg['data'].get('cache_dir'), (cfg['data'].get('norm_mean'), cfg['data'].get('norm_std')))
+                           cfg['data'].get('cache_dir'), (cfg['data'].get('norm_mean'), cfg['data'].get('norm_std')),
+                           cfg['data'].get('recentre'))
 
     if weights is None:
         model = models.DiffusionPoints(cfg)

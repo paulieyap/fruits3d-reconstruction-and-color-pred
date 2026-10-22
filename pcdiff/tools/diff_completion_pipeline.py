@@ -147,6 +147,8 @@ def main(diff, denoising_steps, cond_weight, data, split, cache, out, recentre, 
         yaml.dump(dict(diff_completion.hparams), exp_config)
 
     dataset = CachedFruit(cache, split) if cache else IGGFruit(data_source=data, split=split)
+    # a model trained on recentred samples must see recentred inputs
+    recentre = recentre or diff_completion.hparams['data'].get('recentre') == 'partial'
     if recentre:
         dataset = Recentred(dataset)
     data_cfg = diff_completion.hparams['data']

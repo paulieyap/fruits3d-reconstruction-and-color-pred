@@ -15,15 +15,24 @@ import numpy as np
 @click.command()
 @click.argument('cache_dir')
 @click.option('--split', default='train')
-def main(cache_dir, split):
-    pts = np.concatenate([np.load(f)['aligned_data'].astype(np.float64)
-                          for f in sorted(glob.glob(os.path.join(cache_dir, split, '*.npz'))) if '.tmp' not in f])
+@click.option('--recentre', is_flag=True, help='per fruit, shift so the partial centroid is the origin (data.recentre: partial)')
+def main(cache_dir, split, recentre):
+    pts = []
+    for f in sorted(glob.glob(os.path.join(cache_dir, split, '*.npz'))):
+        if '.tmp' in f:
+            continue
+        c = np.load(f)
+        a = c['aligned_data'].astype(np.float64)
+        if recentre:
+            a[:, :3] -= c['rgbd_pcd'][:, :3].astype(np.float64).mean(0)
+        pts.append(a)
+    pts = np.concatenate(pts)
     xyz, rgb = pts[:, :3], pts[:, 3:]
     rgb = rgb[rgb[:, 1] != -1]
     mean = np.r_[xyz.mean(0), rgb.mean(0)]
     std = np.r_[xyz.std(0), rgb.std(0)]
     fmt = lambda a: '[' + ', '.join(f'{v:.8f}' for v in a) + ']'
-    print(f'# {split}: {len(pts)} points')
+    print(f'# {split}: {len(pts)} points' + (', recentred on the partial centroid' if recentre else ''))
     print(f'    norm_mean: {fmt(mean)}')
     print(f'    norm_std: {fmt(std)}')
 
