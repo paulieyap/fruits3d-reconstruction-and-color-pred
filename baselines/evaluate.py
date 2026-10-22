@@ -66,7 +66,8 @@ def poisson_volume(xyz, depth=8):
     flip = np.einsum('ij,ij->i', n, p - p.mean(0)) < 0
     n[flip] *= -1
     pcd.normals = o3d.utility.Vector3dVector(n)
-    mesh, _ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=depth)
+    # n_threads=1: the default thread pool per worker thrashes under a CPU quota (35-70 s vs 1 s)
+    mesh, _ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=depth, n_threads=1)
     return mesh_volume(mesh)
 
 
