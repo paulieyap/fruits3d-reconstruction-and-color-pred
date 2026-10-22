@@ -1,0 +1,26 @@
+# CPU-only pcdiff image for preprocessing (tools/build_cache.py), geometric baselines
+# and metrics, on machines without a GPU (e.g. next to the dataset storage).
+# Same Python and package pins as Dockerfile.cu128, with CPU torch and no MinkowskiEngine,
+# so anything importing pcdiff.models will not work here.
+#
+#   docker build -f docker/Dockerfile.cpu -t pcdiff:cpu .
+FROM python:3.10.12-slim-bookworm
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git libgl1 libglib2.0-0 libgomp1 libx11-6 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install torch==2.7.1+cpu --index-url https://download.pytorch.org/whl/cpu
+
+COPY docker/requirements-cu128.txt /tmp/requirements-cu128.txt
+RUN pip install -r /tmp/requirements-cu128.txt
+
+RUN git config --system --add safe.directory '*'
+ENV PYTHONPATH=/workspace
+WORKDIR /workspace/pcdiff
+
+CMD ["bash"]

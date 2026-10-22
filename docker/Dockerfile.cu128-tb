@@ -1,0 +1,8 @@
+# Adds tensorboard (needed by Lightning's TensorBoardLogger) on top of an existing
+# pcdiff:cu128 image, without recompiling MinkowskiEngine. A fresh build of
+# Dockerfile.cu128 already includes it via requirements-cu128.txt.
+#
+#   docker build -f docker/Dockerfile.cu128-tb -t pcdiff:cu128-r2 .
+ARG BASE=pcdiff:cu128
+FROM ${BASE}
+RUN pip install tensorboard==2.17.1
