@@ -278,7 +278,8 @@ class ShapeCompletionDataset():
         fid = keys[idx]
 
         if self.cache_dir is not None and os.path.isfile(self.cache_path(fid)):
-            c = np.load(self.cache_path(fid))
+            # stored as float32; cast back so everything downstream sees the same dtype as without cache
+            c = {k: v.astype(np.float64) for k, v in np.load(self.cache_path(fid)).items()}
             gt_pcd = o3d.geometry.PointCloud()
             gt_pcd.points = o3d.utility.Vector3dVector(c['gt_points'])
             if len(c['gt_colors']):
@@ -296,11 +297,12 @@ class ShapeCompletionDataset():
         if self.cache_dir is not None:
             os.makedirs(os.path.dirname(self.cache_path(fid)), exist_ok=True)
             tmp = self.cache_path(fid)[:-4] + '.tmp.npz'
-            np.savez(tmp,
-                     gt_points=np.asarray(item['groundtruth_pcd'].points),
-                     gt_colors=np.asarray(item['groundtruth_pcd'].colors),
-                     rgbd_pcd=item['rgbd_pcd'],
-                     aligned_data=item['aligned_data'])
+            # float32 + compression: ~4x smaller, so the cache can be moved to the GPU box quickly
+            np.savez_compressed(tmp,
+                                gt_points=np.asarray(item['groundtruth_pcd'].points, dtype=np.float32),
+                                gt_colors=np.asarray(item['groundtruth_pcd'].colors, dtype=np.float32),
+                                rgbd_pcd=np.asarray(item['rgbd_pcd'], dtype=np.float32),
+                                aligned_data=np.asarray(item['aligned_data'], dtype=np.float32))
             os.replace(tmp, self.cache_path(fid))  # atomic: parallel workers never see half a file
 
         return item
