@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import open3d as o3d
 from scipy.optimize import least_squares
-from scipy.spatial import ConvexHull
+from scipy.spatial import ConvexHull, cKDTree
 
 N_POINTS = 30000
 FIT_POINTS = 20000  # points used by the iterative fits
@@ -220,11 +220,41 @@ def convex_hull(partial, n_points=N_POINTS, seed=0):
     return _hull_completion(np.asarray(partial)[:, :3], n_points, seed, {})
 
 
+# ---------------------------------------------------------------- input cleaning
+
+def largest_cluster(xyz, voxel=0.002, eps=0.006, min_points=5):
+    """Keep the largest connected cluster of the partial view.
+
+    Fused greenhouse views contain small, sparse clusters from neighbouring fruits or leaves
+    10-15 cm away; they inflate hulls and pull the fits. DBSCAN runs on a 2 mm voxel grid, and
+    every original point near a kept voxel survives.
+    """
+    pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(xyz)).voxel_down_sample(voxel)
+    labels = np.asarray(pcd.cluster_dbscan(eps, min_points))
+    if labels.max() < 0:
+        return xyz
+    keep = np.asarray(pcd.points)[labels == np.bincount(labels[labels >= 0]).argmax()]
+    d, _ = cKDTree(keep).query(xyz, k=1)
+    return xyz[d < 1.5 * voxel]
+
+
+def _cleaned(method):
+    def run(partial, n_points=N_POINTS, seed=0):
+        xyz = largest_cluster(np.asarray(partial, dtype=np.float64)[:, :3])
+        comp = method(xyz, n_points=n_points, seed=seed)
+        comp.params['n_input'] = len(partial)
+        comp.params['n_used'] = len(xyz)
+        return comp
+    run.__doc__ = method.__doc__
+    return run
+
+
+# all methods see the partial view after largest_cluster(); the DDPM gets it unfiltered
 METHODS = {
-    'sphere': sphere,
-    'ellipsoid_aa': ellipsoid_axis_aligned,
-    'ellipsoid_free': ellipsoid_free,
-    'symmetry_plane': symmetry_plane,
-    'symmetry_point': symmetry_point,
-    'convex_hull': convex_hull,
+    'sphere': _cleaned(sphere),
+    'ellipsoid_aa': _cleaned(ellipsoid_axis_aligned),
+    'ellipsoid_free': _cleaned(ellipsoid_free),
+    'symmetry_plane': _cleaned(symmetry_plane),
+    'symmetry_point': _cleaned(symmetry_point),
+    'convex_hull': _cleaned(convex_hull),
 }
