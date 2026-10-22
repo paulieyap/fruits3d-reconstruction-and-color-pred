@@ -35,6 +35,27 @@ class CachedFruit(Dataset):
         }
 
 
+class Recentred(Dataset):
+    """Shifts every sample so the partial observation's centroid is at the origin, as on a robot where
+    no fruit-centred frame exists (the challenge data is centred on each fruit's ground truth, which a
+    model can learn). The offset is kept in extra['offset'] so completions can be shifted back."""
+    def __init__(self, dataset):
+        self.dataset = dataset
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        sample = self.dataset[idx]
+        offset = sample['points'][:, :3].mean(0)
+        sample['points'] = sample['points'].copy()
+        sample['points'][:, :3] -= offset
+        gt = sample['extra']['gt_points'].copy()
+        gt[:, :3] -= offset
+        sample['extra'] = dict(sample['extra'], gt_points=gt, offset=offset)
+        return sample
+
+
 class FruitCollation:
     """Same batch format as train.py, built from IGGFruit samples."""
     def __init__(self, n_full=30000, n_part=15000, norm=(None, None)):
@@ -62,6 +83,7 @@ class FruitCollation:
             'mean': torch.stack(mean).float(),
             'std': torch.stack(std).float(),
             'fruit_id': [sample['extra']['fruit_id'] for sample in data],
+            'offset': [sample['extra'].get('offset', np.zeros(3)) for sample in data],
         }
 
 
@@ -113,9 +135,10 @@ def to_o3d(points):
 @click.option('--split', type=str, default='test', help='split to complete (default: test)')
 @click.option('--cache', type=str, default=None, help='read inputs from this sample cache instead of the raw data (same preprocessing as training)')
 @click.option('--out', type=str, default='./results', help='output root (default: ./results)')
+@click.option('--recentre', is_flag=True, help='centre each input on its partial centroid, shift completions back')
 @click.option('--vis', is_flag=True, help='show each completed fruit')
-def main(diff, denoising_steps, cond_weight, data, split, cache, out, vis):
-    exp_dir = diff.split('/')[-1].split('.')[0].replace('=', '') + f'_T{denoising_steps}_s{cond_weight}'
+def main(diff, denoising_steps, cond_weight, data, split, cache, out, recentre, vis):
+    exp_dir = diff.split('/')[-1].split('.')[0].replace('=', '') + f'_T{denoising_steps}_s{cond_weight}' + ('_recentred' if recentre else '')
     out_dir = os.path.join(out, exp_dir, 'diff')
     os.makedirs(out_dir, exist_ok=True)
 
@@ -124,6 +147,8 @@ def main(diff, denoising_steps, cond_weight, data, split, cache, out, vis):
         yaml.dump(dict(diff_completion.hparams), exp_config)
 
     dataset = CachedFruit(cache, split) if cache else IGGFruit(data_source=data, split=split)
+    if recentre:
+        dataset = Recentred(dataset)
     data_cfg = diff_completion.hparams['data']
     loader = DataLoader(dataset, batch_size=1, num_workers=0,
                         collate_fn=FruitCollation(norm=(data_cfg.get('norm_mean'), data_cfg.get('norm_std'))))
@@ -136,7 +161,8 @@ def main(diff, denoising_steps, cond_weight, data, split, cache, out, vis):
         torch.cuda.synchronize()
         runtimes += [(fid, (time.time() - t) / len(batch['fruit_id'])) for fid in batch['fruit_id']]
 
-        for fruit_id, points in zip(batch['fruit_id'], completed):
+        for fruit_id, points, offset in zip(batch['fruit_id'], completed, batch['offset']):
+            points[:, :3] += offset  # back to the input frame
             pcd_diff = to_o3d(points)
             o3d.io.write_point_cloud(os.path.join(out_dir, f'{fruit_id}.ply'), pcd_diff)
             if vis:
