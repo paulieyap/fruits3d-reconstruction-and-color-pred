@@ -45,7 +45,19 @@ def test_sphere_radius_and_hull_lower_bound_on_ellipsoid():
     assert abs(e.volume / vol(r) - 1) < 0.25, e.volume / vol(r)
 
 
+def test_size_prior_bounds_radius():
+    from baselines.geometric import prior_methods
+    rng = np.random.default_rng(2)
+    # a flat, noisy patch: unconstrained fits run off to huge radii
+    partial = np.c_[rng.uniform(-0.03, 0.03, (5000, 2)), rng.normal(0, 0.002, 5000)]
+    for name, f in prior_methods(0.03, 0.05).items():
+        out = f(partial)
+        assert out.volume <= 4 / 3 * np.pi * 0.05 ** 3 * 1.001, (name, out.volume)
+        assert out.volume >= 4 / 3 * np.pi * 0.03 ** 3 * 0.999, (name, out.volume)
+
+
 if __name__ == '__main__':
+    test_size_prior_bounds_radius()
     test_shapes_and_volume_on_sphere_cap()
     test_sphere_radius_and_hull_lower_bound_on_ellipsoid()
     rng = np.random.default_rng(0)

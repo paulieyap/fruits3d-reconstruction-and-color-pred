@@ -34,7 +34,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'pcdiff', 'comp
 from chamfer_distance import ChamferDistance  # noqa: E402  (toolkit uses flat imports)
 from precision_recall import PrecisionRecall  # noqa: E402
 
-from baselines.geometric import METHODS  # noqa: E402
+import json  # noqa: E402
+
+from baselines.geometric import METHODS, prior_methods  # noqa: E402
 
 VISIBLE_THRESH = 0.005  # GT point counts as observed if a partial point lies within 5 mm
 F_THRESH = 0.005
@@ -89,7 +91,10 @@ def score(gt, pred):
 
 
 def evaluate_fruit(args):
-    path, methods, preds, out = args
+    path, methods, preds, out, size_prior = args
+    available = dict(METHODS)
+    if size_prior is not None:
+        available.update(prior_methods(size_prior['r_min'], size_prior['r_max']))
     fid = os.path.basename(path)[:-4]
     c = np.load(path)
     gt = c['gt_points'].astype(np.float64)
@@ -110,7 +115,7 @@ def evaluate_fruit(args):
     for name, pred_dir in todo:
         t = time.time()
         if pred_dir is None:
-            comp = METHODS[name](partial)
+            comp = available[name](partial)
             pts, vol = comp.points, comp.volume
             n_used = comp.params.get('n_used', len(partial))
         else:
@@ -143,15 +148,20 @@ def evaluate_fruit(args):
 @click.option('--out', required=True)
 @click.option('--methods', default=','.join(METHODS), help='comma-separated geometric methods ("" for none)')
 @click.option('--pred', multiple=True, help='NAME=DIR of <fid>.ply completions from another method (e.g. the DDPM)')
+@click.option('--size-prior', default=None, help='JSON from baselines/size_prior.py; adds the *_prior variants')
 @click.option('--workers', type=int, default=8)
-def main(cache, split, out, methods, pred, workers):
+def main(cache, split, out, methods, pred, size_prior, workers):
     methods = [m for m in methods.split(',') if m]
+    if size_prior is not None:
+        size_prior = json.load(open(size_prior))
+        assert size_prior['split'] != split, 'size prior must come from a different split'
+        methods += [m for m in prior_methods(0, 1) if m not in methods]
     preds = dict(p.split('=', 1) for p in pred)
     os.makedirs(out, exist_ok=True)
     split_dir = os.path.join(cache, split)
     paths = sorted(os.path.join(split_dir, f) for f in os.listdir(split_dir) if f.endswith('.npz') and '.tmp' not in f)
 
-    jobs = [(p, methods, preds, out) for p in paths]
+    jobs = [(p, methods, preds, out, size_prior) for p in paths]
     rows = []
     with multiprocessing.get_context('spawn').Pool(workers) as pool:
         for k, fruit_rows in enumerate(pool.imap_unordered(evaluate_fruit, jobs), 1):

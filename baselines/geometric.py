@@ -56,30 +56,47 @@ def _sphere_algebraic(xyz):
     return c, r
 
 
-def fit_sphere(xyz, n_iter=200, inlier_thresh=0.002, seed=0):
-    """RANSAC on 4-point algebraic fits, then a geometric (Huber) refinement on the inliers."""
+def _bounds_x0(x0, lb, ub):
+    """least_squares needs a start strictly inside the bounds."""
+    eps = 1e-6
+    return np.minimum(np.maximum(x0, np.asarray(lb) + eps), np.asarray(ub) - eps)
+
+
+def fit_sphere(xyz, n_iter=200, inlier_thresh=0.002, seed=0, r_range=None):
+    """RANSAC on 4-point algebraic fits, then a geometric (Huber) refinement on the inliers.
+    With r_range=(r_min, r_max) (size prior), candidates outside the range are rejected and the
+    refinement is bounded."""
+    r_lo, r_hi = r_range if r_range is not None else (0.0, 0.2)  # no fruit here is larger than 40 cm
     rng = _rng(seed)
     xyz = _subsample(xyz, FIT_POINTS, seed)
     best_c, best_r = _sphere_algebraic(xyz)
     best_inl = np.abs(np.linalg.norm(xyz - best_c, axis=1) - best_r) < inlier_thresh
+    if not r_lo <= best_r <= r_hi:
+        best_inl[:] = False
     for _ in range(n_iter):
         idx = rng.choice(len(xyz), 4, replace=False)
         c, r = _sphere_algebraic(xyz[idx])
-        if not np.isfinite(r) or r > 0.2:  # no fruit here is larger than 40 cm
+        if not np.isfinite(r) or not r_lo <= r <= r_hi:
             continue
         inl = np.abs(np.linalg.norm(xyz - c, axis=1) - r) < inlier_thresh
         if inl.sum() > best_inl.sum():
             best_c, best_r, best_inl = c, r, inl
 
     pts = xyz[best_inl] if best_inl.sum() >= 10 else xyz
+    if r_range is None:
+        lb, ub = -np.inf, np.inf
+        x0 = np.r_[best_c, best_r]
+    else:
+        lb, ub = [-np.inf] * 3 + [r_lo], [np.inf] * 3 + [r_hi]
+        x0 = _bounds_x0(np.r_[best_c, best_r], lb, ub)
     res = least_squares(lambda p: np.linalg.norm(pts - p[:3], axis=1) - p[3],
-                        np.r_[best_c, best_r], loss='huber', f_scale=inlier_thresh)
+                        x0, bounds=(lb, ub), loss='huber', f_scale=inlier_thresh)
     return res.x[:3], abs(res.x[3]), float(best_inl.mean())
 
 
-def sphere(partial, n_points=N_POINTS, seed=0):
+def sphere(partial, n_points=N_POINTS, seed=0, r_range=None):
     xyz = np.asarray(partial)[:, :3]
-    c, r, inlier_ratio = fit_sphere(xyz, seed=seed)
+    c, r, inlier_ratio = fit_sphere(xyz, seed=seed, r_range=r_range)
     pts = c + r * _unit_sphere(n_points, _rng(seed))
     return Completion(pts, 4 / 3 * np.pi * r ** 3, {'center': c, 'radius': r, 'inlier_ratio': inlier_ratio})
 
@@ -112,12 +129,18 @@ def _shape_prior(a, r0, n, weight):
     return weight * np.sqrt(n) * (a - r0)
 
 
-def fit_ellipsoid_axis_aligned(xyz, init_c, init_r, prior=0.05):
-    """Ellipsoid with axes along the world axes: radial distance + Huber, weak sphere prior."""
+def fit_ellipsoid_axis_aligned(xyz, init_c, init_r, prior=0.05, r_range=None):
+    """Ellipsoid with axes along the world axes: radial distance + Huber, weak sphere prior,
+    radii bounded by r_range (size prior) if given."""
     def resid(p):
         c, a = p[:3], np.abs(p[3:]) + 1e-6
         return np.r_[_radial_resid(xyz - c, a), _shape_prior(a, init_r, len(xyz), prior)]
-    res = least_squares(resid, np.r_[init_c, [init_r] * 3], loss='huber', f_scale=0.002)
+    x0 = np.r_[init_c, [init_r] * 3]
+    lb, ub = -np.inf, np.inf
+    if r_range is not None:
+        lb, ub = [-np.inf] * 3 + [r_range[0]] * 3, [np.inf] * 3 + [r_range[1]] * 3
+        x0 = _bounds_x0(x0, lb, ub)
+    res = least_squares(resid, x0, bounds=(lb, ub), loss='huber', f_scale=0.002)
     return res.x[:3], np.eye(3), np.abs(res.x[3:])
 
 
@@ -131,7 +154,7 @@ def _rot(v):
     return np.eye(3) + np.sin(th) * K + (1 - np.cos(th)) * K @ K
 
 
-def fit_ellipsoid_free(xyz, init_c, init_r, seed=0, prior=0.05):
+def fit_ellipsoid_free(xyz, init_c, init_r, seed=0, prior=0.05, r_range=None):
     """Free-orientation ellipsoid: centre, 3 radii and a rotation, started from the sphere fit
     and a few PCA-aligned orientations (partial views make this fit poorly conditioned)."""
     def resid(p):
@@ -148,22 +171,28 @@ def fit_ellipsoid_free(xyz, init_c, init_r, seed=0, prior=0.05):
         axis = np.array([R0[2, 1] - R0[1, 2], R0[0, 2] - R0[2, 0], R0[1, 0] - R0[0, 1]]) / (2 * np.sin(ang))
         starts.append(axis * ang)
 
+    lb, ub = -np.inf, np.inf
+    if r_range is not None:
+        lb, ub = [-np.inf] * 6 + [r_range[0]] * 3, [np.inf] * 6 + [r_range[1]] * 3
     best = None
     for rv in starts:
-        res = least_squares(resid, np.r_[init_c, rv, [init_r] * 3], loss='huber', f_scale=0.002)
+        x0 = np.r_[init_c, rv, [init_r] * 3]
+        if r_range is not None:
+            x0 = _bounds_x0(x0, lb, ub)
+        res = least_squares(resid, x0, bounds=(lb, ub), loss='huber', f_scale=0.002)
         if best is None or res.cost < best.cost:
             best = res
     return best.x[:3], _rot(best.x[3:6]), np.abs(best.x[6:])
 
 
-def _ellipsoid(partial, free, n_points, seed, max_ratio=2.0):
+def _ellipsoid(partial, free, n_points, seed, max_ratio=2.0, r_range=None):
     xyz = np.asarray(partial)[:, :3]
-    c0, r0, _ = fit_sphere(xyz, seed=seed)
+    c0, r0, _ = fit_sphere(xyz, seed=seed, r_range=r_range)
     xyz = _subsample(xyz, FIT_POINTS, seed)
     if free:
-        c, R, radii = fit_ellipsoid_free(xyz, c0, r0, seed=seed)
+        c, R, radii = fit_ellipsoid_free(xyz, c0, r0, seed=seed, r_range=r_range)
     else:
-        c, R, radii = fit_ellipsoid_axis_aligned(xyz, c0, r0)
+        c, R, radii = fit_ellipsoid_axis_aligned(xyz, c0, r0, r_range=r_range)
     # partial caps leave the unseen axis unconstrained; clamp radii relative to the sphere fit
     clamped = bool(np.any(radii > max_ratio * r0) or np.any(radii < r0 / max_ratio))
     radii = np.clip(radii, r0 / max_ratio, max_ratio * r0)
@@ -172,12 +201,12 @@ def _ellipsoid(partial, free, n_points, seed, max_ratio=2.0):
                       {'center': c, 'rotation': R, 'radii': radii, 'clamped': clamped})
 
 
-def ellipsoid_axis_aligned(partial, n_points=N_POINTS, seed=0):
-    return _ellipsoid(partial, False, n_points, seed)
+def ellipsoid_axis_aligned(partial, n_points=N_POINTS, seed=0, r_range=None):
+    return _ellipsoid(partial, False, n_points, seed, r_range=r_range)
 
 
-def ellipsoid_free(partial, n_points=N_POINTS, seed=0):
-    return _ellipsoid(partial, True, n_points, seed)
+def ellipsoid_free(partial, n_points=N_POINTS, seed=0, r_range=None):
+    return _ellipsoid(partial, True, n_points, seed, r_range=r_range)
 
 
 # ---------------------------------------------------------------- symmetry
@@ -238,10 +267,10 @@ def largest_cluster(xyz, voxel=0.002, eps=0.006, min_points=5):
     return xyz[d < 1.5 * voxel]
 
 
-def _cleaned(method):
+def _cleaned(method, **kwargs):
     def run(partial, n_points=N_POINTS, seed=0):
         xyz = largest_cluster(np.asarray(partial, dtype=np.float64)[:, :3])
-        comp = method(xyz, n_points=n_points, seed=seed)
+        comp = method(xyz, n_points=n_points, seed=seed, **kwargs)
         comp.params['n_input'] = len(partial)
         comp.params['n_used'] = len(xyz)
         return comp
@@ -258,3 +287,14 @@ METHODS = {
     'symmetry_point': _cleaned(symmetry_point),
     'convex_hull': _cleaned(convex_hull),
 }
+
+
+def prior_methods(r_min, r_max):
+    """Variants with a fruit size prior: every fitted radius is bounded to [r_min, r_max] (m).
+    Estimate the range on a split you do not evaluate on (baselines/size_prior.py)."""
+    r = (r_min, r_max)
+    return {
+        'sphere_prior': _cleaned(sphere, r_range=r),
+        'ellipsoid_aa_prior': _cleaned(ellipsoid_axis_aligned, r_range=r),
+        'ellipsoid_free_prior': _cleaned(ellipsoid_free, r_range=r),
+    }
