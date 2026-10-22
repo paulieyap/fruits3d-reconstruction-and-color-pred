@@ -1,13 +1,16 @@
-# Installed on top of torch 2.7 (CUDA 12.8) and MinkowskiEngine (see Dockerfile.cu128).
-numpy<2
-scipy
-pytorch_lightning>=2.2,<2.6
+# Installed on top of torch 2.7.1 (CUDA 12.8) and MinkowskiEngine 0.5.4 (see Dockerfile.cu128).
+# Exact versions frozen from the pcdiff:cu128 image used for training.
+numpy==1.26.4
+scipy==1.15.3
+pytorch_lightning==2.2.4
+torchmetrics==1.9.0
+lightning-utilities==0.15.3
 diffusers==0.18.0
 huggingface_hub==0.20.3
-open3d>=0.18
-opencv-python-headless
-matplotlib
-click
-natsort
-tqdm
-pyyaml
+open3d==0.18.0
+opencv-python-headless==4.11.0.86
+matplotlib==3.8.4
+click==8.5.0
+natsort==8.4.0
+tqdm==4.66.4
+PyYAML==6.0.3
