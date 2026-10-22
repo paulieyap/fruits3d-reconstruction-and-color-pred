@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         git libgl1 libglib2.0-0 libgomp1 libx11-6 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install torch==2.7.1+cpu --index-url https://download.pytorch.org/whl/cpu
+RUN pip install torch==2.7.1+cpu --extra-index-url https://download.pytorch.org/whl/cpu
 
 COPY docker/requirements-cu128.txt /tmp/requirements-cu128.txt
 RUN pip install -r /tmp/requirements-cu128.txt
