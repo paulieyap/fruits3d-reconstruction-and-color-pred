@@ -78,8 +78,12 @@ class FruitCollation:
 
 
 class FruitDataModule(LightningDataModule):
-    def __init__(self, data_source):
+    def __init__(self, data_source, batch_size=8, num_workers=0, cache_dir=None):
+        super().__init__()
         self.data_source = data_source
+        self.cache_dir = cache_dir
+        self.batch_size = batch_size
+        self.num_workers = num_workers
 
     def train_dataloader(self):
         '''
@@ -87,8 +91,9 @@ class FruitDataModule(LightningDataModule):
         loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
         print('Train samples: ', len(loader))
         '''
-        dataset = ShapeCompletionDataset(data_source=self.data_source, split='train')
-        loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
+        dataset = ShapeCompletionDataset(data_source=self.data_source, split='train', cache_dir=self.cache_dir)
+        loader = DataLoader(dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True,
+                            collate_fn=FruitCollation(), persistent_workers=self.num_workers > 0)
 
         
         return loader
@@ -100,8 +105,8 @@ class FruitDataModule(LightningDataModule):
         print('Val samples: ', len(loader))
         '''
 
-        dataset = ShapeCompletionDataset(data_source=self.data_source, split='val')#split='val'
-        loader = DataLoader(dataset, batch_size=1, num_workers=0, collate_fn=FruitCollation())
+        dataset = ShapeCompletionDataset(data_source=self.data_source, split='val', cache_dir=self.cache_dir)#split='val'
+        loader = DataLoader(dataset, batch_size=1, num_workers=self.num_workers, collate_fn=FruitCollation())
 
         return loader
 
@@ -111,8 +116,8 @@ class FruitDataModule(LightningDataModule):
         loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
         print('Test samples: ', len(loader))    
         '''
-        dataset = ShapeCompletionDataset(data_source=self.data_source,split ='test') 
-        loader = DataLoader(dataset, batch_size=1, num_workers=0, collate_fn=FruitCollation())
+        dataset = ShapeCompletionDataset(data_source=self.data_source, split='test', cache_dir=self.cache_dir) 
+        loader = DataLoader(dataset, batch_size=1, num_workers=self.num_workers, collate_fn=FruitCollation())
 
 
         return loader
@@ -148,7 +153,8 @@ def main(config, weights, checkpoint, test):
     #data = datasets.dataloaders[cfg['data']['dataloader']](cfg)   
 
 
-    data = FruitDataModule(cfg['data']['fruit_dir'])
+    data = FruitDataModule(cfg['data']['fruit_dir'], cfg['train']['batch_size'], cfg['train']['num_workers'],
+                           cfg['data'].get('cache_dir'))
 
     if weights is None:
         model = models.DiffusionPoints(cfg)
@@ -158,16 +164,17 @@ def main(config, weights, checkpoint, test):
     #Add callbacks
     lr_monitor = LearningRateMonitor(logging_interval='step')
     checkpoint_saver = ModelCheckpoint(filename=cfg['experiment']['id']+'_{epoch:02d}',
-                                 save_top_k=-1)
+                                 save_top_k=-1, save_last=True,
+                                 every_n_epochs=cfg['train'].get('ckpt_every_n_epochs', 1))
 
     tb_logger = pl_loggers.TensorBoardLogger('experiments/'+cfg['experiment']['id'],
                                              default_hp_metric=False)
 
     #Setup trainer
-    trainer = Trainer(gpus=cfg['train']['n_gpus'],
+    trainer = Trainer(accelerator='gpu',
+                      devices=cfg['train']['n_gpus'],
                       logger=tb_logger,
                       log_every_n_steps=100,
-                      resume_from_checkpoint=checkpoint,
                       max_epochs= cfg['train']['max_epoch'],
                       callbacks=[lr_monitor, checkpoint_saver],
                       check_val_every_n_epoch=1,
@@ -187,7 +194,7 @@ def main(config, weights, checkpoint, test):
     else:
         print('TRAINING MODE')
         
-        trainer.fit(model, data)
+        trainer.fit(model, datamodule=data, ckpt_path=checkpoint)
 
 if __name__ == "__main__":
     main()

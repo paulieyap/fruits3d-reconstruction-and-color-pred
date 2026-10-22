@@ -9,8 +9,7 @@ from pcdiff.utils.scheduling import beta_func
 from tqdm import tqdm
 from os import makedirs
 
-from pytorch_lightning.core.lightning import LightningModule
-from pytorch_lightning import LightningDataModule
+from pytorch_lightning import LightningModule, LightningDataModule
 from pcdiff.utils.collations import *
 from pcdiff.utils.metrics import ChamferDistance, PrecisionRecall
 from diffusers import DPMSolverMultistepScheduler
@@ -246,6 +245,15 @@ class DiffusionPoints(LightningModule):
         torch.cuda.empty_cache()
 
         return loss_sum
+
+    def on_validation_epoch_start(self):
+        # metrics accumulate over update() calls; score each validation run on its own
+        self.chamfer_distance.reset()
+        self.precision_recall.reset()
+
+    def on_test_epoch_start(self):
+        self.chamfer_distance.reset()
+        self.precision_recall.reset()
 
     def validation_step(self, batch:dict, batch_idx):
         if batch_idx != 0:

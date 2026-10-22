@@ -1,7 +1,7 @@
-"""Load converted flower samples through pcdiff's own loaders and check alignment.
+"""Load converted shape-completion samples (any crop) through pcdiff's own loaders and check alignment.
 
 Run in the pcdiff container with the dataset mounted at /data:
-  python3 tools/check_flower_samples.py /data OUT_DIR
+  python3 tools/check_samples.py /data OUT_DIR
 """
 import os
 import sys

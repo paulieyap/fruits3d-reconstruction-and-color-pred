@@ -16,7 +16,8 @@ class ShapeCompletionDataset():
                  data_source=None,
                  split='train',
                  return_pcd = True,
-                 return_rgbd = True
+                 return_rgbd = True,
+                 cache_dir = None
                 
                  ):
 
@@ -30,6 +31,9 @@ class ShapeCompletionDataset():
         self.split = split
         self.return_pcd = return_pcd
         self.return_rgbd = return_rgbd
+        # per-fruit results of __getitem__ (fusion, ICP, color transfer) are deterministic,
+        # so they can be computed once and stored as <cache_dir>/<split>/<fruit_id>.npz
+        self.cache_dir = cache_dir
         
         self.fruit_list = self.get_file_paths()
 
@@ -43,11 +47,21 @@ class ShapeCompletionDataset():
 
     def get_file_paths(self):
         fruit_list = {}
-        for fid in os.listdir(os.path.join(self.data_source, self.split)):
+        split_root = os.path.join(self.data_source, self.split)
+        if os.path.isdir(split_root):
+            fids = sorted(os.listdir(split_root))
+        else:
+            # raw data not present: train from the cache alone
+            assert self.cache_dir is not None, f"{split_root} not found and no cache_dir given"
+            fids = sorted(f[:-4] for f in os.listdir(os.path.join(self.cache_dir, self.split)) if f.endswith('.npz'))
+        for fid in fids:
             fruit_list[fid] = {
-                'path': os.path.join(self.data_source, self.split, fid),
+                'path': os.path.join(split_root, fid),
             }
         return fruit_list
+
+    def cache_path(self, fid):
+        return os.path.join(self.cache_dir, self.split, fid + '.npz')
 
     def get_gt(self, fid):
         return o3d.io.read_point_cloud(os.path.join(self.fruit_list[fid]['path'],'gt/pcd/fruit.ply'))
@@ -124,9 +138,12 @@ class ShapeCompletionDataset():
             'frames':{}
             }
 
-        frames = os.listdir(os.path.join(fid_root,'input/masks/'))
+        frames = sorted(os.listdir(os.path.join(fid_root,'input/masks/')))
 
-        
+        # collected over all frames, fused once after the loop
+        valid_pcds = []
+        all_pcds = []
+
         for frameid in frames:
             print("FRAMEID:", frameid)
             pose_path = os.path.join(fid_root,'input/poses/',frameid.replace('png','txt'))
@@ -144,9 +161,9 @@ class ShapeCompletionDataset():
             frame_key = frameid.replace('png','')
 
             if self.return_pcd:
-                valid_pcds = [] 
                 frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
                 frame_pcd_outlierRemoved, ind = frame_pcd.remove_statistical_outlier(nb_neighbors=200, std_ratio=2.0)
+                all_pcds.append(frame_pcd_outlierRemoved)
                 #add calc of mean and std 
                 #Calculate- Calculating the Mean and Standard Deviation of the points
                 # - if the x-coordinate of the standard deviation is too high, drop/ignore this sweet pepper
@@ -163,28 +180,24 @@ class ShapeCompletionDataset():
                 else:
                     print(f"Skipping frame {frame_key}. x-coord std is: {std_xyz[0]}")
 
-
-                #accepted pcds are used if the list will contain an element
-            if valid_pcds:
-                rgbd_data['pcd'] = valid_pcds[0]  
-                for i in range(1, len(valid_pcds)):
-                    icp_transformation_pcd, icp_trans = self.p2p_icp(valid_pcds[i], rgbd_data['pcd'], np.eye(4))
-                    rgbd_data['pcd'] += icp_transformation_pcd
-            else:
-                rgbd_data['pcd'] += frame_pcd_outlierRemoved #just use the "ugly" pcd lol 
-                print("No valid point clouds found. Aggregation skipped.")
-
-
-                # original below:
-                # frame_pcd = self.rgbd_to_pcd(rgb, depth, mask, pose, intrinsic)
-                # rgbd_data['pcd'] += frame_pcd #aggregation of frames
-
             rgbd_data['frames'][frame_key] = {
                 'rgb': rgb,
                 'depth': depth,
                 'mask': mask,
                 'pose': pose
             }
+
+        # fuse the accepted frames, refining each one onto the aggregate with ICP
+        if valid_pcds:
+            rgbd_data['pcd'] = valid_pcds[0]
+            for pcd in valid_pcds[1:]:
+                icp_transformation_pcd, icp_trans = self.p2p_icp(pcd, rgbd_data['pcd'], np.eye(4))
+                rgbd_data['pcd'] += icp_transformation_pcd
+        elif all_pcds:
+            # no frame passed the std check: fall back to the plain pose-based aggregation of all frames
+            print("No valid point clouds found, fusing all frames without ICP.")
+            for pcd in all_pcds:
+                rgbd_data['pcd'] += pcd
 
         return rgbd_data
 
@@ -261,10 +274,38 @@ class ShapeCompletionDataset():
         return len(self.fruit_list)
 
     def __getitem__(self, idx):
-        
         keys = list(self.fruit_list.keys()) #all sweet pepper keys in dataset
         fid = keys[idx]
-        
+
+        if self.cache_dir is not None and os.path.isfile(self.cache_path(fid)):
+            c = np.load(self.cache_path(fid))
+            gt_pcd = o3d.geometry.PointCloud()
+            gt_pcd.points = o3d.utility.Vector3dVector(c['gt_points'])
+            if len(c['gt_colors']):
+                gt_pcd.colors = o3d.utility.Vector3dVector(c['gt_colors'])
+            return {
+                'groundtruth_pcd': gt_pcd,
+                'rgbd_pcd': c['rgbd_pcd'],
+                'aligned_data': c['aligned_data'],
+                'fruit_id': fid,
+                'aligned_data_length': int(c['aligned_data'].shape[0]),
+            }
+
+        item = self.compute_item(fid)
+
+        if self.cache_dir is not None:
+            os.makedirs(os.path.dirname(self.cache_path(fid)), exist_ok=True)
+            tmp = self.cache_path(fid)[:-4] + '.tmp.npz'
+            np.savez(tmp,
+                     gt_points=np.asarray(item['groundtruth_pcd'].points),
+                     gt_colors=np.asarray(item['groundtruth_pcd'].colors),
+                     rgbd_pcd=item['rgbd_pcd'],
+                     aligned_data=item['aligned_data'])
+            os.replace(tmp, self.cache_path(fid))  # atomic: parallel workers never see half a file
+
+        return item
+
+    def compute_item(self, fid):
         input_data = self.get_rgbd(fid)
         partial_pcd = input_data['pcd']
 

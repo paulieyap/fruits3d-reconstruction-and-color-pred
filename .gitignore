@@ -122,3 +122,6 @@ Thumbs.db
 slurm-*.out
 *.err
 nohup.out
+
+# Local Claude Code notes
+CLAUDE.md
