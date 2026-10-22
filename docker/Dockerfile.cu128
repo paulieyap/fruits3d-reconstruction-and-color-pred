@@ -1,0 +1,37 @@
+# pcdiff on CUDA 12.8 / torch 2.7, for Blackwell GPUs (RTX 50xx, compute capability 12.0),
+# which the CUDA 11.1 image in ../Dockerfile cannot run on.
+#
+#   docker build -f docker/Dockerfile.cu128 -t pcdiff:cu128 .
+#
+# BASE must provide python3, torch (CUDA 12.x build), nvcc and g++. Any image with
+# torch 2.7.1+cu128 and the CUDA devel toolkit works, e.g. to reuse a local one:
+#   docker build -f docker/Dockerfile.cu128 --build-arg BASE=<local-torch-cu128-image> -t pcdiff:cu128 .
+ARG BASE=pytorch/pytorch:2.7.1-cuda12.8-cudnn9-devel
+FROM ${BASE}
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git build-essential ninja-build libopenblas-dev libgl1 libglib2.0-0 libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Compute capabilities to build MinkowskiEngine for (+PTX lets newer GPUs JIT-compile)
+ARG TORCH_CUDA_ARCH_LIST="8.6 8.9 12.0+PTX"
+COPY docker/build_minkowski_cu12.sh /tmp/build_minkowski_cu12.sh
+RUN bash /tmp/build_minkowski_cu12.sh "${TORCH_CUDA_ARCH_LIST}" && rm /tmp/build_minkowski_cu12.sh
+
+COPY docker/requirements-cu128.txt /tmp/requirements-cu128.txt
+RUN pip install -r /tmp/requirements-cu128.txt
+
+# torch >= 2.6 defaults torch.load(weights_only=True), which Lightning checkpoints
+# (they pickle the hparams dict) do not pass.
+ENV TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
+
+# The code is mounted at /workspace at runtime; train.py calls git.
+RUN git config --system --add safe.directory '*'
+ENV PYTHONPATH=/workspace
+WORKDIR /workspace/pcdiff
+
+CMD ["bash"]

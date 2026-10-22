@@ -1,2 +1,4 @@
 *
 !docker/requirements-docker.txt
+!docker/requirements-cu128.txt
+!docker/build_minkowski_cu12.sh

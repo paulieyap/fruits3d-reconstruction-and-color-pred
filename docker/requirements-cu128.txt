@@ -1,0 +1,13 @@
+# Installed on top of torch 2.7 (CUDA 12.8) and MinkowskiEngine (see Dockerfile.cu128).
+numpy<2
+scipy
+pytorch_lightning>=2.2,<2.6
+diffusers==0.18.0
+huggingface_hub==0.20.3
+open3d>=0.18
+opencv-python-headless
+matplotlib
+click
+natsort
+tqdm
+pyyaml
