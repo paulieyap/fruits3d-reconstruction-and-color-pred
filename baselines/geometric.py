@@ -18,6 +18,7 @@ from scipy.optimize import least_squares
 from scipy.spatial import ConvexHull
 
 N_POINTS = 30000
+FIT_POINTS = 20000  # points used by the iterative fits
 
 
 @dataclass
@@ -29,6 +30,13 @@ class Completion:
 
 def _rng(seed=0):
     return np.random.default_rng(seed)
+
+
+def _subsample(xyz, n, seed):
+    """Random subset for the iterative fits; fused partials have up to ~1M points."""
+    if len(xyz) <= n:
+        return xyz
+    return xyz[_rng(seed).choice(len(xyz), n, replace=False)]
 
 
 def _unit_sphere(n, rng):
@@ -51,6 +59,7 @@ def _sphere_algebraic(xyz):
 def fit_sphere(xyz, n_iter=200, inlier_thresh=0.002, seed=0):
     """RANSAC on 4-point algebraic fits, then a geometric (Huber) refinement on the inliers."""
     rng = _rng(seed)
+    xyz = _subsample(xyz, FIT_POINTS, seed)
     best_c, best_r = _sphere_algebraic(xyz)
     best_inl = np.abs(np.linalg.norm(xyz - best_c, axis=1) - best_r) < inlier_thresh
     for _ in range(n_iter):
@@ -150,6 +159,7 @@ def fit_ellipsoid_free(xyz, init_c, init_r, seed=0, prior=0.05):
 def _ellipsoid(partial, free, n_points, seed, max_ratio=2.0):
     xyz = np.asarray(partial)[:, :3]
     c0, r0, _ = fit_sphere(xyz, seed=seed)
+    xyz = _subsample(xyz, FIT_POINTS, seed)
     if free:
         c, R, radii = fit_ellipsoid_free(xyz, c0, r0, seed=seed)
     else:
