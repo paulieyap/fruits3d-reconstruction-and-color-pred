@@ -1,4 +1,5 @@
 import os
+import time
 
 import click
 import numpy as np
@@ -6,11 +7,32 @@ import open3d as o3d
 import torch
 import tqdm
 import yaml
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 from pcdiff.datasets.igg_fruit import IGGFruit
 from pcdiff.models.models import DiffusionPoints
 from pcdiff.utils.collations import point_set_to_sparse, unormalize_pcd
+
+
+class CachedFruit(Dataset):
+    """IGGFruit-style samples from the training cache (tools/build_cache.py), so inference sees the
+    same fused/ICP-refined partial observation the model was trained on."""
+    def __init__(self, cache_dir, split):
+        root = os.path.join(cache_dir, split)
+        self.paths = sorted(os.path.join(root, f) for f in os.listdir(root) if f.endswith('.npz') and '.tmp' not in f)
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, idx):
+        c = np.load(self.paths[idx])
+        return {
+            'points': c['rgbd_pcd'].astype(np.float64),
+            'extra': {
+                'gt_points': c['aligned_data'].astype(np.float64),
+                'fruit_id': os.path.basename(self.paths[idx])[:-4],
+            },
+        }
 
 
 class FruitCollation:
@@ -87,26 +109,38 @@ def to_o3d(points):
 @click.option('--cond_weight', '-s', type=float, default=6.0, help='conditioning weight (default: 6.0)')
 @click.option('--data', type=str, default='./data/shape_completion_challenge', help='dataset root with train/ and test/ splits')
 @click.option('--split', type=str, default='test', help='split to complete (default: test)')
+@click.option('--cache', type=str, default=None, help='read inputs from this sample cache instead of the raw data (same preprocessing as training)')
+@click.option('--out', type=str, default='./results', help='output root (default: ./results)')
 @click.option('--vis', is_flag=True, help='show each completed fruit')
-def main(diff, denoising_steps, cond_weight, data, split, vis):
+def main(diff, denoising_steps, cond_weight, data, split, cache, out, vis):
     exp_dir = diff.split('/')[-1].split('.')[0].replace('=', '') + f'_T{denoising_steps}_s{cond_weight}'
-    out_dir = f'./results/{exp_dir}/diff'
+    out_dir = os.path.join(out, exp_dir, 'diff')
     os.makedirs(out_dir, exist_ok=True)
 
     diff_completion = DiffCompletion(diff, denoising_steps, cond_weight)
-    with open(f'./results/{exp_dir}/exp_config.yaml', 'w+') as exp_config:
+    with open(os.path.join(out, exp_dir, 'exp_config.yaml'), 'w+') as exp_config:
         yaml.dump(dict(diff_completion.hparams), exp_config)
 
-    loader = DataLoader(IGGFruit(data_source=data, split=split), batch_size=1, num_workers=0, collate_fn=FruitCollation())
+    dataset = CachedFruit(cache, split) if cache else IGGFruit(data_source=data, split=split)
+    loader = DataLoader(dataset, batch_size=1, num_workers=0, collate_fn=FruitCollation())
 
+    runtimes = []
     for batch in tqdm.tqdm(loader):
+        torch.cuda.synchronize()
+        t = time.time()
         completed = diff_completion.complete(batch)
+        torch.cuda.synchronize()
+        runtimes += [(fid, (time.time() - t) / len(batch['fruit_id'])) for fid in batch['fruit_id']]
 
         for fruit_id, points in zip(batch['fruit_id'], completed):
             pcd_diff = to_o3d(points)
             o3d.io.write_point_cloud(os.path.join(out_dir, f'{fruit_id}.ply'), pcd_diff)
             if vis:
                 o3d.visualization.draw_geometries([pcd_diff])
+
+    with open(os.path.join(out, exp_dir, 'runtimes.csv'), 'w') as f:
+        f.write('fruit_id,runtime_s\n')
+        f.writelines(f'{fid},{rt:.3f}\n' for fid, rt in runtimes)
 
 
 if __name__ == '__main__':
