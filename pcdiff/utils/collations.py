@@ -18,7 +18,14 @@ def normalize_pcd(points, mean, std):
 def unormalize_pcd(points, mean, std):
     return (points * std[:,None,:]) + mean[:,None,:] if len(mean.shape) == 2 else (points * std) + mean
 
-def point_set_to_sparse(p_full, p_part, n_full, n_part, resolution): #replace p_full with rgbd
+# XYZRGB normalisation statistics of the thesis training data (IGG sweet pepper, not fruit-centred).
+# Datasets in another frame (e.g. the shape completion challenge, centred on each fruit) need their own:
+# set data.norm_mean / data.norm_std in the config (tools/norm_stats.py computes them).
+THESIS_NORM_MEAN = [-0.04177155,  0.03841237, -0.03472447,  0.39953194,  0.39472064, 0.37596458]
+THESIS_NORM_STD = [0.02371479, 0.01226978, 0.01996409, 0.15754811, 0.17013572, 0.19951918]
+
+
+def point_set_to_sparse(p_full, p_part, n_full, n_part, resolution, norm_mean=None, norm_std=None): #replace p_full with rgbd
     # ipdb.set_trace()
     concat_full = np.ceil(n_full / p_full.shape[0])
     concat_part = np.ceil(n_part / p_part.shape[0])
@@ -34,8 +41,10 @@ def point_set_to_sparse(p_full, p_part, n_full, n_part, resolution): #replace p_
     #p_full = torch.cat((p_full, p_part), axis=0)
     #replace with pre-computed value
     # p_mean, p_std = p_full.mean(axis=0), p_full.std(axis=0)
-    precomp_mean = np.array([-0.04177155,  0.03841237, -0.03472447,  0.39953194,  0.39472064,0.37596458])
-    precomp_std  = np.array([0.02371479, 0.01226978, 0.01996409, 0.15754811, 0.17013572,0.19951918])
+    precomp_mean = np.array(THESIS_NORM_MEAN if norm_mean is None else norm_mean, dtype=np.float64)
+    precomp_std = np.array(THESIS_NORM_STD if norm_std is None else norm_std, dtype=np.float64)
+    # no copy on purpose (thesis behaviour): the per-sample RGB stats written into p_mean/p_std below
+    # also end up in the returned mean/std, which are used to unnormalise generated colours
     p_mean, p_std = precomp_mean, precomp_std
     
 

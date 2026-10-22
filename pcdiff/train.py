@@ -22,8 +22,9 @@ from pcdiff.dataloader import ShapeCompletionDataset
 from pcdiff.utils.collations import point_set_to_sparse
 
 class FruitCollation:
-    def __init__(self):
-        return
+    def __init__(self, norm=(None, None)):
+        # (mean, std) of XYZRGB for point_set_to_sparse; (None, None) = thesis statistics
+        self.norm_mean, self.norm_std = norm
 
     def __call__(self, data):
         # print('entering fit')
@@ -48,7 +49,7 @@ class FruitCollation:
             aligned_xyz = aligned_data[:,:3]
             aligned_rgb = aligned_data[:,3:]
             # sparse = point_set_to_sparse(gt_np, part_np, 30000, 15000, 0.01)
-            sparse = point_set_to_sparse(aligned_data, part_np, 30000, 15000, 0.01)
+            sparse = point_set_to_sparse(aligned_data, part_np, 30000, 15000, 0.01, self.norm_mean, self.norm_std)
             
 
             # Store the sparse components
@@ -78,8 +79,9 @@ class FruitCollation:
 
 
 class FruitDataModule(LightningDataModule):
-    def __init__(self, data_source, batch_size=8, num_workers=0, cache_dir=None):
+    def __init__(self, data_source, batch_size=8, num_workers=0, cache_dir=None, norm=(None, None)):
         super().__init__()
+        self.norm = norm
         self.data_source = data_source
         self.cache_dir = cache_dir
         self.batch_size = batch_size
@@ -88,12 +90,12 @@ class FruitDataModule(LightningDataModule):
     def train_dataloader(self):
         '''
         dataset = IGGFruit(data_source=self.data_source)#, precomputed_augmentation='/mnt/igg_fruit/processed/SweetPepper3')
-        loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
+        loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation(self.norm))
         print('Train samples: ', len(loader))
         '''
         dataset = ShapeCompletionDataset(data_source=self.data_source, split='train', cache_dir=self.cache_dir)
         loader = DataLoader(dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True,
-                            collate_fn=FruitCollation(), persistent_workers=self.num_workers > 0)
+                            collate_fn=FruitCollation(self.norm), persistent_workers=self.num_workers > 0)
 
         
         return loader
@@ -101,23 +103,23 @@ class FruitDataModule(LightningDataModule):
     def val_dataloader(self):
         '''
         dataset = IGGFruit(data_source=self.data_source)#split='val'
-        loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
+        loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation(self.norm))
         print('Val samples: ', len(loader))
         '''
 
         dataset = ShapeCompletionDataset(data_source=self.data_source, split='val', cache_dir=self.cache_dir)#split='val'
-        loader = DataLoader(dataset, batch_size=1, num_workers=self.num_workers, collate_fn=FruitCollation())
+        loader = DataLoader(dataset, batch_size=1, num_workers=self.num_workers, collate_fn=FruitCollation(self.norm))
 
         return loader
 
     def test_dataloader(self):
         '''
         dataset = IGGFruit(data_source=self.data_source) # split='train'
-        loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation())
+        loader = DataLoader(dataset, batch_size=8, num_workers=0, collate_fn=FruitCollation(self.norm))
         print('Test samples: ', len(loader))    
         '''
         dataset = ShapeCompletionDataset(data_source=self.data_source, split='test', cache_dir=self.cache_dir) 
-        loader = DataLoader(dataset, batch_size=1, num_workers=self.num_workers, collate_fn=FruitCollation())
+        loader = DataLoader(dataset, batch_size=1, num_workers=self.num_workers, collate_fn=FruitCollation(self.norm))
 
 
         return loader
@@ -154,7 +156,7 @@ def main(config, weights, checkpoint, test):
 
 
     data = FruitDataModule(cfg['data']['fruit_dir'], cfg['train']['batch_size'], cfg['train']['num_workers'],
-                           cfg['data'].get('cache_dir'))
+                           cfg['data'].get('cache_dir'), (cfg['data'].get('norm_mean'), cfg['data'].get('norm_std')))
 
     if weights is None:
         model = models.DiffusionPoints(cfg)

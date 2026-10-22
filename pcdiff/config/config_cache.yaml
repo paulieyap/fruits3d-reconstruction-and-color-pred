@@ -9,6 +9,8 @@ data:
     fruit_dir: '/data' # raw data not mounted on the GPU box; samples come from cache_dir
     cache_dir: '/cache' # tools/build_cache.py output, mounted into the container
     resolution: 0.001
+    norm_mean: null # XYZRGB normalisation; null = thesis statistics (utils/collations.py), see tools/norm_stats.py
+    norm_std: null
     dataloader: 'KITTI'
     split: 'train'
     train: [ '00', '01', '02', '03', '04', '05', '06', '07', '09', '10' ]

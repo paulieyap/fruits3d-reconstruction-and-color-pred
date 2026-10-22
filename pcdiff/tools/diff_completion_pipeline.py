@@ -37,9 +37,10 @@ class CachedFruit(Dataset):
 
 class FruitCollation:
     """Same batch format as train.py, built from IGGFruit samples."""
-    def __init__(self, n_full=30000, n_part=15000):
+    def __init__(self, n_full=30000, n_part=15000, norm=(None, None)):
         self.n_full = n_full
         self.n_part = n_part
+        self.norm_mean, self.norm_std = norm  # must match training (hparams data.norm_mean/norm_std)
 
     def __call__(self, data):
         pcd_full = []
@@ -48,7 +49,8 @@ class FruitCollation:
         std = []
 
         for sample in data:
-            sparse = point_set_to_sparse(sample['extra']['gt_points'], sample['points'], self.n_full, self.n_part, 0.01)
+            sparse = point_set_to_sparse(sample['extra']['gt_points'], sample['points'], self.n_full, self.n_part, 0.01,
+                                         self.norm_mean, self.norm_std)
             pcd_full.append(sparse[0])
             mean.append(sparse[1])
             std.append(sparse[2])
@@ -122,7 +124,9 @@ def main(diff, denoising_steps, cond_weight, data, split, cache, out, vis):
         yaml.dump(dict(diff_completion.hparams), exp_config)
 
     dataset = CachedFruit(cache, split) if cache else IGGFruit(data_source=data, split=split)
-    loader = DataLoader(dataset, batch_size=1, num_workers=0, collate_fn=FruitCollation())
+    data_cfg = diff_completion.hparams['data']
+    loader = DataLoader(dataset, batch_size=1, num_workers=0,
+                        collate_fn=FruitCollation(norm=(data_cfg.get('norm_mean'), data_cfg.get('norm_std'))))
 
     runtimes = []
     for batch in tqdm.tqdm(loader):
