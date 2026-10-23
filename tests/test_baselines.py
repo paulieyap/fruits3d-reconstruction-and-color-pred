@@ -52,11 +52,39 @@ def test_size_prior_bounds_radius():
     partial = np.c_[rng.uniform(-0.03, 0.03, (5000, 2)), rng.normal(0, 0.002, 5000)]
     for name, f in prior_methods(0.03, 0.05).items():
         out = f(partial)
+        if 'radii' in out.params and 'e1' in out.params:  # superquadric: volume also depends on the exponents
+            assert np.all(out.params['radii'] <= 0.05 + 1e-9) and np.all(out.params['radii'] >= 0.03 - 1e-9), (name, out.params)
+            continue
         assert out.volume <= 4 / 3 * np.pi * 0.05 ** 3 * 1.001, (name, out.volume)
         assert out.volume >= 4 / 3 * np.pi * 0.03 ** 3 * 0.999, (name, out.volume)
 
 
+def test_superquadric_volume_and_boxy_shape():
+    from baselines.geometric import superquadric_volume, _superquadric_points, superquadric
+    a = np.array([0.03, 0.025, 0.02])
+    assert abs(superquadric_volume(a, 1, 1) / vol(a) - 1) < 1e-9  # ellipsoid limit
+    # Monte-Carlo check of the closed form for a boxy superquadric
+    rng = np.random.default_rng(3)
+    q = rng.uniform(-1, 1, (400000, 3)) * a
+    from baselines.geometric import _sq_inside
+    mc = (_sq_inside(q, a, 0.5, 0.6) <= 1).mean() * 8 * a.prod()
+    assert abs(superquadric_volume(a, 0.5, 0.6) / mc - 1) < 0.02
+    pts = _superquadric_points(np.zeros(3), np.eye(3), a, 0.5, 0.6, 20000, rng)
+    V = superquadric_volume(a, 0.5, 0.6)
+    # fully visible: shape recovered
+    full = superquadric(pts + rng.normal(scale=0.0003, size=pts.shape))
+    assert abs(full.params['e1'] - 0.5) < 0.1 and abs(full.params['e2'] - 0.6) < 0.1, full.params
+    assert abs(full.volume / V - 1) < 0.03, full.volume / V
+    # 57 % visible (top hidden): exponents still move below 1; the unseen radius is pulled towards the
+    # mean radius by the shape prior, so volume is only within 25 %
+    m = pts[:, 2] < 0.005
+    out = superquadric(pts[m] + rng.normal(scale=0.0003, size=(int(m.sum()), 3)))
+    assert out.params['e1'] < 0.95 and out.params['e2'] < 0.95, out.params
+    assert abs(out.volume / V - 1) < 0.25, out.volume / V
+
+
 if __name__ == '__main__':
+    test_superquadric_volume_and_boxy_shape()
     test_size_prior_bounds_radius()
     test_shapes_and_volume_on_sphere_cap()
     test_sphere_radius_and_hull_lower_bound_on_ellipsoid()

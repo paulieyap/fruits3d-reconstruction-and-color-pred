@@ -209,6 +209,82 @@ def ellipsoid_free(partial, n_points=N_POINTS, seed=0, r_range=None):
     return _ellipsoid(partial, True, n_points, seed, r_range=r_range)
 
 
+# ---------------------------------------------------------------- superquadric
+
+def _rotvec(R):
+    """Rotation vector of a rotation matrix (inverse of _rot)."""
+    ang = np.arccos(np.clip((np.trace(R) - 1) / 2, -1, 1))
+    if ang < 1e-9:
+        return np.zeros(3)
+    if np.pi - ang < 1e-6:  # 180 deg: axis from the symmetric part
+        axis = np.sqrt(np.clip((np.diag(R) + 1) / 2, 0, None))
+        return axis / np.linalg.norm(axis) * ang
+    return np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]]) / (2 * np.sin(ang)) * ang
+
+
+def _sq_inside(q, a, e1, e2):
+    """Superquadric inside-outside function: 1 on the surface, <1 inside."""
+    x, y, z = (np.abs(q) / a + 1e-12).T
+    return (x ** (2 / e2) + y ** (2 / e2)) ** (e2 / e1) + z ** (2 / e1)
+
+
+def _sq_resid(q, a, e1, e2):
+    """Radial distance (m) from each point to the superquadric surface (Solina & Bajcsy)."""
+    return np.linalg.norm(q, axis=1) * (1 - _sq_inside(q, a, e1, e2) ** (-e1 / 2))
+
+
+def superquadric_volume(a, e1, e2):
+    """Closed-form volume (Jaklic et al.); e1 = e2 = 1 gives the ellipsoid 4/3 pi abc."""
+    from scipy.special import beta
+    return 2 * np.prod(a) * e1 * e2 * beta(e1 / 2 + 1, e1) * beta(e2 / 2, e2 / 2)
+
+
+def _superquadric_points(c, R, a, e1, e2, n, rng, voxel=0.0007):
+    """~uniform surface samples: dense parametric sampling, thinned on a voxel grid."""
+    m = max(20 * n, 400000)
+    eta = rng.uniform(-np.pi / 2, np.pi / 2, m)
+    om = rng.uniform(-np.pi, np.pi, m)
+    f = lambda t, e: np.sign(t) * np.abs(t) ** e
+    p = np.c_[a[0] * f(np.cos(eta), e1) * f(np.cos(om), e2),
+              a[1] * f(np.cos(eta), e1) * f(np.sin(om), e2),
+              a[2] * f(np.sin(eta), e1)]
+    p = np.asarray(o3d.geometry.PointCloud(o3d.utility.Vector3dVector(p)).voxel_down_sample(voxel).points)
+    p = p[rng.choice(len(p), n, replace=len(p) < n)]
+    return p @ R.T + c
+
+
+def fit_superquadric(xyz, init_c, init_R, init_a, prior=0.05, exp_prior=0.5, r_range=None, e_range=(0.3, 1.7)):
+    """Free-orientation superquadric: centre, rotation, 3 radii and 2 shape exponents, started from the
+    ellipsoid fit. Weak priors pull the radii to their mean and the exponents to 1 (ellipsoid), so
+    unseen parts stay ellipsoid-like unless the data says otherwise."""
+    r0 = float(np.mean(init_a))
+    n = len(xyz)
+
+    def resid(p):
+        c, R, a, e1, e2 = p[:3], _rot(p[3:6]), np.abs(p[6:9]) + 1e-6, p[9], p[10]
+        return np.r_[_sq_resid((xyz - c) @ R, a, e1, e2),
+                     _shape_prior(a, r0, n, prior),
+                     exp_prior * np.sqrt(n) * 0.002 * (np.r_[e1, e2] - 1)]
+
+    r_lo, r_hi = r_range if r_range is not None else (0.2 * r0, 3 * r0)
+    lb = [-np.inf] * 6 + [r_lo] * 3 + [e_range[0]] * 2
+    ub = [np.inf] * 6 + [r_hi] * 3 + [e_range[1]] * 2
+    x0 = _bounds_x0(np.r_[init_c, _rotvec(init_R), init_a, 1.0, 1.0], lb, ub)
+    res = least_squares(resid, x0, bounds=(lb, ub), loss='huber', f_scale=0.002)
+    return res.x[:3], _rot(res.x[3:6]), np.abs(res.x[6:9]), res.x[9], res.x[10]
+
+
+def superquadric(partial, n_points=N_POINTS, seed=0, r_range=None):
+    xyz = np.asarray(partial)[:, :3]
+    c0, r0, _ = fit_sphere(xyz, seed=seed, r_range=r_range)
+    sub = _subsample(xyz, FIT_POINTS, seed)
+    ce, Re, ae = fit_ellipsoid_free(sub, c0, r0, seed=seed, r_range=r_range)
+    c, R, a, e1, e2 = fit_superquadric(sub, ce, Re, ae, r_range=r_range)
+    pts = _superquadric_points(c, R, a, e1, e2, n_points, _rng(seed))
+    return Completion(pts, float(superquadric_volume(a, e1, e2)),
+                      {'center': c, 'rotation': R, 'radii': a, 'e1': float(e1), 'e2': float(e2)})
+
+
 # ---------------------------------------------------------------- symmetry
 
 def _hull_completion(xyz, n_points, seed, params):
@@ -286,6 +362,7 @@ METHODS = {
     'symmetry_plane': _cleaned(symmetry_plane),
     'symmetry_point': _cleaned(symmetry_point),
     'convex_hull': _cleaned(convex_hull),
+    'superquadric': _cleaned(superquadric),
 }
 
 
@@ -297,4 +374,5 @@ def prior_methods(r_min, r_max):
         'sphere_prior': _cleaned(sphere, r_range=r),
         'ellipsoid_aa_prior': _cleaned(ellipsoid_axis_aligned, r_range=r),
         'ellipsoid_free_prior': _cleaned(ellipsoid_free, r_range=r),
+        'superquadric_prior': _cleaned(superquadric, r_range=r),
     }
