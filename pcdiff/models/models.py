@@ -127,13 +127,13 @@ class DiffusionPoints(LightningModule):
 
         return x_part, x_uncond
 
-    def p_sample_loop(self, x_t, x_cond, x_uncond, gt_pts, x_mean, x_std, batch_idx):
-        
+    def p_sample_loop(self, x_t, x_cond, x_uncond, gt_pts, x_mean, x_std, batch_idx, step_callback=None):
+        # step_callback(i, x_t): optional, called after every denoising step (e.g. to record the trajectory)
         pcd = o3d.geometry.PointCloud()
         self.scheduler_to_cuda()
 
-        for t in tqdm(range(len(self.dpm_scheduler.timesteps))):
-            t = torch.ones(gt_pts.shape[0]).cuda().long() * self.dpm_scheduler.timesteps[t].cuda()
+        for i in tqdm(range(len(self.dpm_scheduler.timesteps))):
+            t = torch.ones(gt_pts.shape[0]).cuda().long() * self.dpm_scheduler.timesteps[i].cuda()
 
             noise_t = self.classfree_forward(x_t, x_cond, x_uncond, t)
             x_t = self.dpm_scheduler.step(noise_t, t[0], x_t.F.reshape(t.shape[0],-1,6))['prev_sample']
@@ -143,6 +143,8 @@ class DiffusionPoints(LightningModule):
             # i.e. memory leak
             x_cond, x_uncond = self.reset_partial_pcd(x_cond, x_uncond, x_mean, x_std)
             torch.cuda.empty_cache()
+            if step_callback is not None:
+                step_callback(i, x_t)
         '''
         pcd = o3d.geometry.PointCloud()
         self.scheduler_to_cuda()

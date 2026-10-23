@@ -102,7 +102,9 @@ class DiffCompletion:
         self.hparams = self.model.hparams
 
     @torch.no_grad()
-    def complete(self, batch):
+    def complete(self, batch, save_steps=()):
+        """Completes a batch; with save_steps (denoising step indices, -1 = initial noise) also returns the
+        unnormalised XYZRGB point clouds at those steps as {step: (B, N, 6) array}."""
         pcd_part = batch['pcd_part'].cuda()
         mean = batch['mean'].cuda()
         std = batch['std'].cuda()
@@ -113,11 +115,19 @@ class DiffCompletion:
         x_cond = self.model.points_to_tensor(pcd_part, mean, std)
         x_uncond = self.model.points_to_tensor(torch.zeros_like(pcd_part), torch.zeros_like(mean), torch.zeros_like(std))
 
-        # p_sample_loop only uses the first dimension of gt_pts (batch size)
-        x_gen = self.model.p_sample_loop(x_full, x_cond, x_uncond, np.empty((pcd_part.shape[0], 0)), mean, std, 0)
-        x_gen = x_gen.F.reshape((pcd_part.shape[0], -1, 6))
+        B = pcd_part.shape[0]
+        traj = {}
+        unnorm = lambda x: unormalize_pcd(x.F.reshape((B, -1, 6)), mean, std).cpu().numpy()
+        if -1 in save_steps:
+            traj[-1] = unnorm(x_full)
+        callback = (lambda i, x: traj.__setitem__(i, unnorm(x)) if i in save_steps else None) if save_steps else None
 
-        return unormalize_pcd(x_gen, mean, std).cpu().numpy()
+        # p_sample_loop only uses the first dimension of gt_pts (batch size)
+        x_gen = self.model.p_sample_loop(x_full, x_cond, x_uncond, np.empty((B, 0)), mean, std, 0, step_callback=callback)
+        x_gen = x_gen.F.reshape((B, -1, 6))
+
+        out = unormalize_pcd(x_gen, mean, std).cpu().numpy()
+        return (out, traj) if save_steps else out
 
 
 def to_o3d(points):
@@ -136,8 +146,10 @@ def to_o3d(points):
 @click.option('--cache', type=str, default=None, help='read inputs from this sample cache instead of the raw data (same preprocessing as training)')
 @click.option('--out', type=str, default='./results', help='output root (default: ./results)')
 @click.option('--recentre', is_flag=True, help='centre each input on its partial centroid, shift completions back')
+@click.option('--save-steps', type=str, default='', help='comma-separated denoising step indices to save (-1 = initial noise), e.g. -1,0,10,25,49')
+@click.option('--fruits', type=str, default='', help='comma-separated fruit ids to complete (default: all)')
 @click.option('--vis', is_flag=True, help='show each completed fruit')
-def main(diff, denoising_steps, cond_weight, data, split, cache, out, recentre, vis):
+def main(diff, denoising_steps, cond_weight, data, split, cache, out, recentre, save_steps, fruits, vis):
     exp_dir = diff.split('/')[-1].split('.')[0].replace('=', '') + f'_T{denoising_steps}_s{cond_weight}' + ('_recentred' if recentre else '')
     out_dir = os.path.join(out, exp_dir, 'diff')
     os.makedirs(out_dir, exist_ok=True)
@@ -149,8 +161,15 @@ def main(diff, denoising_steps, cond_weight, data, split, cache, out, recentre, 
     dataset = CachedFruit(cache, split) if cache else IGGFruit(data_source=data, split=split)
     # a model trained on recentred samples must see recentred inputs
     recentre = recentre or diff_completion.hparams['data'].get('recentre') == 'partial'
+    if fruits:
+        keep = set(fruits.split(','))
+        if isinstance(dataset, CachedFruit):
+            dataset.paths = [p for p in dataset.paths if os.path.basename(p)[:-4] in keep]
+        else:
+            dataset.samples = [smp for smp in dataset.samples if smp[1] in keep]
     if recentre:
         dataset = Recentred(dataset)
+    save_steps = tuple(int(v) for v in save_steps.split(',')) if save_steps else ()
     data_cfg = diff_completion.hparams['data']
     loader = DataLoader(dataset, batch_size=1, num_workers=0,
                         collate_fn=FruitCollation(norm=(data_cfg.get('norm_mean'), data_cfg.get('norm_std'))))
@@ -159,8 +178,15 @@ def main(diff, denoising_steps, cond_weight, data, split, cache, out, recentre, 
     for batch in tqdm.tqdm(loader):
         torch.cuda.synchronize()
         t = time.time()
-        completed = diff_completion.complete(batch)
+        completed = diff_completion.complete(batch, save_steps)
         torch.cuda.synchronize()
+        if save_steps:
+            completed, traj = completed
+            for b, (fruit_id, offset) in enumerate(zip(batch['fruit_id'], batch['offset'])):
+                steps = sorted(traj)
+                frames = np.stack([traj[i][b] for i in steps]).astype(np.float32)
+                frames[..., :3] += offset  # back to the input frame
+                np.savez_compressed(os.path.join(out, exp_dir, f'{fruit_id}_trajectory.npz'), steps=np.array(steps), points=frames)
         runtimes += [(fid, (time.time() - t) / len(batch['fruit_id'])) for fid in batch['fruit_id']]
 
         for fruit_id, points, offset in zip(batch['fruit_id'], completed, batch['offset']):
