@@ -96,9 +96,9 @@ data:
     fruit_dir: './data/shape_completion_challenge'
 ```
 
-The folder is expected to contain `train/` and `test/` splits, in the layout
-used by the shape completion challenge dataset. Datasets are not included in
-this repo.
+The folder is expected to contain `train/`, `val/` and `test/` splits, in the
+layout used by the shape completion challenge dataset (`test/` has no ground
+truth). Datasets are not included in this repo.
 
 ## Training
 
@@ -127,6 +127,62 @@ The completed XYZRGB point clouds are written to
 to pick a split (default `test`) and `--vis` to view each result. The
 checkpoint folder must contain the `hparams.yaml` written during training.
 Trained checkpoints are not included in this repo.
+
+`-T 50 -s 1.0` worked best on the challenge validation split; higher
+conditioning weights (the default 6.0 included) clearly hurt. Other options:
+`--cache` reads inputs from the sample cache (same preprocessing as training),
+`--recentre` centres every input on its partial observation, `--fruits` limits
+the run to some fruit ids, and `--save-steps -1,0,25,49` stores the denoising
+trajectory at those steps.
+
+## Reproducing the challenge validation results
+
+Steps used to retrain the model and compare it with geometric baselines on the
+shape completion challenge (validation split). Run inside the Docker images:
+`docker/Dockerfile.cu128` for the GPU steps on RTX 50xx (or `Dockerfile` for
+older GPUs) and `docker/Dockerfile.cpu` for preprocessing, baselines and
+metrics. Paths below are placeholders; mount your data and cache folders
+accordingly.
+
+```bash
+# images
+docker build -f docker/Dockerfile.cu128 -t pcdiff:cu128 .
+docker build --network host -f docker/Dockerfile.cu128-tb -t pcdiff:cu128-r2 .   # adds tensorboard
+docker build -f docker/Dockerfile.cpu -t pcdiff:cpu .
+
+# 1. preprocess every fruit once (fusion, ICP, colour transfer), CPU image, from pcdiff/
+python3 tools/build_cache.py /data /cache --splits train --splits val --splits test --workers 8
+
+# 2. normalisation statistics for this dataset (the defaults are the thesis data's);
+#    --recentre for training in the partial-centred frame
+python3 tools/norm_stats.py /cache --split train --recentre
+#    -> copy norm_mean / norm_std into a copy of config/config_cache.yaml and set
+#       data.recentre: partial, train.max_epoch, train.val_every_n_epochs (e.g. 10)
+
+# 3. train (GPU image, cache mounted at /cache)
+python3 train.py --config config/my_config.yaml
+
+# 4. complete the validation split with a checkpoint
+python3 tools/diff_completion_pipeline.py --diff experiments/<id>/lightning_logs/version_0/checkpoints/<id>_epoch=499.ckpt \
+    -T 50 -s 1.0 --cache /cache --split val --out results
+
+# 5. geometric baselines + official metrics + volume error + occlusion, from the repo root (CPU image)
+python3 -m baselines.size_prior --cache /cache --split train --out size_prior_train.json
+python3 -m baselines.evaluate --cache /cache --split val --out eval_val --size-prior size_prior_train.json \
+    --pred ddpm=pcdiff/results/<checkpoint>_T50_s1.0/diff
+python3 -m baselines.report eval_val/results.csv eval_val/report      # tables + error-vs-occlusion plots
+python3 pcdiff/tools/render_overlay.py /cache val renders lab30 p13 --pred ddpm=pcdiff/results/<checkpoint>_T50_s1.0/diff
+
+# checks
+python3 tests/test_baselines.py
+SC_DATA=/data python3 tests/test_igg_fruit.py
+```
+
+Metrics follow the official toolkit (vendored in `pcdiff/competition_tools`):
+Chamfer distance in mm, precision / recall / F-score as area under the curve
+over 1-10 mm. The challenge data is centred on each fruit's ground truth; a
+model trained in that frame learns to rely on it, so train with
+`data.recentre: partial` for use on real captures.
 
 ## Citation
 
