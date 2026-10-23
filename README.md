@@ -132,7 +132,7 @@ Trained checkpoints are not included in this repo.
 conditioning weights (the default 6.0 included) clearly hurt. Other options:
 `--cache` reads inputs from the sample cache (same preprocessing as training),
 `--recentre` centres every input on its partial observation, `--fruits` limits
-the run to some fruit ids, and `--save-steps -1,0,25,49` stores the denoising
+the run to some fruit ids, and `--save-steps=-1,0,25,49` stores the denoising
 trajectory at those steps.
 
 ## Reproducing the challenge validation results
