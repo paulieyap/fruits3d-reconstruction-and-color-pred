@@ -10,8 +10,8 @@ data:
     fruit_dir: '/data' # raw data not mounted on the GPU box; samples come from cache_dir
     cache_dir: '/cache' # tools/build_cache.py output, mounted into the container
     resolution: 0.001
-    norm_mean: null # XYZRGB normalisation; null = thesis statistics (utils/collations.py), see tools/norm_stats.py
-    norm_std: null
+    norm_mean: [-0.00062180, -0.00179172, 0.01716488, 0.50597506, 0.35757342, 0.26834562] # harvester syn train, recentred (3000 samples)
+    norm_std: [0.02033235, 0.01676986, 0.01815973, 0.18451143, 0.17843542, 0.16492007]
     recentre: partial # 'partial': centre every sample on its partial observation (no fruit-centred frame at deployment)
     dataloader: 'KITTI'
     split: 'train'

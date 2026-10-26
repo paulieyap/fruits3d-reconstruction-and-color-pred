@@ -43,6 +43,15 @@ class DiffusionPoints(LightningModule):
         self.sqrt_one_minus_alphas_cumprod = torch.sqrt(1. - self.alphas_cumprod)
 
 
+        # 'epsilon' (thesis) or 'v_prediction'. With epsilon and this linear schedule (alpha_bar(T) ~ 4e-5) the x0
+        # implied at the noisiest steps is (x - sigma*eps)/0.0064, so a small epsilon bias becomes a large offset;
+        # v-prediction keeps that estimate bounded.
+        self.prediction = self.hparams['diff'].get('prediction', 'epsilon')
+        # epsilon models only, sampling: above this t, re-centre (and rescale) the implied x0 per sample to the
+        # training prior before each solver step (None = off, the thesis behaviour)
+        self.x0_fix_tc = self.hparams['diff'].get('x0_fix_tc')
+        self.x0_prior_std = self.hparams['diff'].get('x0_prior_std')
+
         # for fast sampling
         self.s_steps = self.hparams['diff']['s_steps']
         self.dpm_scheduler = DPMSolverMultistepScheduler(
@@ -52,6 +61,7 @@ class DiffusionPoints(LightningModule):
                 beta_schedule='linear',
                 algorithm_type='sde-dpmsolver++',
                 solver_order=2,
+                prediction_type=self.prediction,
         )
         self.dpm_scheduler.set_timesteps(self.s_steps)
         self.scheduler_to_cuda()
@@ -142,6 +152,8 @@ class DiffusionPoints(LightningModule):
             t = torch.ones(gt_pts.shape[0]).cuda().long() * self.dpm_scheduler.timesteps[i].cuda()
 
             noise_t = self.classfree_forward(x_t, x_cond, x_uncond, t)
+            if self.prediction == 'epsilon' and self.x0_fix_tc is not None and int(t[0]) > self.x0_fix_tc:
+                noise_t = self.x0_moment_fix(noise_t, x_t.F.reshape(t.shape[0], -1, 6), int(t[0]))
             x_t = self.dpm_scheduler.step(noise_t, t[0], x_t.F.reshape(t.shape[0],-1,6))['prev_sample']
             x_t = self.points_to_tensor(x_t, x_mean, x_std)
 
@@ -172,6 +184,20 @@ class DiffusionPoints(LightningModule):
 
         '''
         return x_t
+
+    def x0_moment_fix(self, eps, x_t, t):
+        """Shift (and with x0_prior_std rescale) the XYZ of the x0 implied by eps to zero mean per sample, the
+        normalised training prior, and return the matching eps."""
+        ab = self.dpm_scheduler.alphas_cumprod[t]
+        a, s = torch.sqrt(ab), torch.sqrt(1 - ab)
+        xt = x_t[..., :3]
+        x0 = (xt - s * eps[..., :3]) / a
+        x0 = x0 - x0.mean(1, keepdim=True)
+        if self.x0_prior_std is not None:
+            x0 = x0 / x0.std(1, keepdim=True) * torch.tensor(self.x0_prior_std, device=x0.device)
+        eps = eps.clone()
+        eps[..., :3] = (xt - a * x0) / s
+        return eps
 
     def p_losses(self, y, noise):
         return F.mse_loss(y, noise)
@@ -237,10 +263,15 @@ class DiffusionPoints(LightningModule):
         
         
         denoise_t = self.forward(x_full, x_full.sparse(), x_part, t) #1,3000,6
-        loss_xyz = self.p_losses(denoise_t[...,:3], noise[...,:3]) #loss_xyz
+        if self.prediction == 'v_prediction':
+            target = (self.sqrt_alphas_cumprod[t][:,None,None] * noise
+                      - self.sqrt_one_minus_alphas_cumprod[t][:,None,None] * batch['pcd_full'])
+        else:
+            target = noise
+        loss_xyz = self.p_losses(denoise_t[...,:3], target[...,:3]) #loss_xyz
 
         #remove the non-colored points when computing 
-        loss_rgb = self.p_losses(denoise_t[mask][...,3:], noise[mask][...,3:])
+        loss_rgb = self.p_losses(denoise_t[mask][...,3:], target[mask][...,3:])
 
         loss_sum = loss_xyz + loss_rgb 
         self.log('train/diff_loss', loss_sum)

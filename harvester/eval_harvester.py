@@ -72,9 +72,15 @@ def batches(items, n):
 @click.option('-T', 'steps', default=50)
 @click.option('-s', 'cond_w', default=1.0)
 @click.option('--bs', default=8)
-def main(diff, data, out, n_syn, n_real, real_split, steps, cond_w, bs):
+@click.option('--x0-fix-tc', type=int, default=None, help='epsilon models: re-centre/rescale the implied x0 above this t')
+@click.option('--x0-prior-std', default=None, help='comma-separated normalised XYZ std of a GT fruit, e.g. 0.83,0.79,0.86')
+def main(diff, data, out, n_syn, n_real, real_split, steps, cond_w, bs, x0_fix_tc, x0_prior_std):
     os.makedirs(os.path.join(out, 'preds'), exist_ok=True)
-    dc = DiffCompletion(diff, steps, cond_w)
+    ov = {}
+    if x0_fix_tc is not None:
+        ov['x0_fix_tc'] = x0_fix_tc
+        ov['x0_prior_std'] = [float(v) for v in x0_prior_std.split(',')] if x0_prior_std else None
+    dc = DiffCompletion(diff, steps, cond_w, ov)
     dcfg = dc.hparams['data']
     norm = (dcfg.get('norm_mean'), dcfg.get('norm_std'))
     recentre = dcfg.get('recentre') == 'partial'
@@ -142,7 +148,7 @@ def main(diff, data, out, n_syn, n_real, real_split, steps, cond_w, bs):
         fh.write(','.join(keys) + '\n')
         for r in rows:
             fh.write(','.join(str(r.get(k, '')) for k in keys) + '\n')
-    summ = {'ckpt': diff, 'T': steps, 's': cond_w}
+    summ = {'ckpt': diff, 'T': steps, 's': cond_w, 'x0_fix_tc': x0_fix_tc, 'x0_prior_std': x0_prior_std}
     for kind in ('syn', 'real'):
         rs = [r for r in rows if r['kind'] == kind]
         summ[kind] = {'n': len(rs)}

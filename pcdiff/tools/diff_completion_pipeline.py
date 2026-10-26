@@ -89,13 +89,14 @@ class FruitCollation:
 
 class DiffCompletion:
     """Loads a trained DiffusionPoints (XYZRGB) checkpoint and completes partial fruits."""
-    def __init__(self, diff_path, denoising_steps, cond_weight):
+    def __init__(self, diff_path, denoising_steps, cond_weight, diff_overrides=None):
         hparams = yaml.safe_load(open(os.path.join(diff_path.split('checkpoints')[0], 'hparams.yaml')))
         assert denoising_steps <= hparams['diff']['t_steps'], \
             f"The number of denoising steps cannot be bigger than T={hparams['diff']['t_steps']} (you've set '-T {denoising_steps}')"
 
         hparams['diff']['s_steps'] = denoising_steps
         hparams['train']['uncond_w'] = cond_weight
+        hparams['diff'].update(diff_overrides or {})  # e.g. x0_fix_tc / x0_prior_std (sampling only)
 
         self.model = DiffusionPoints.load_from_checkpoint(diff_path, hparams=hparams).cuda()
         self.model.eval()
