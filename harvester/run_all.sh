@@ -55,7 +55,7 @@ mkdir -p $RUN
 DOCKER="docker run --rm --gpus all --shm-size=16g --user $(id -u):$(id -g) -e HOME=/tmp
   -v $CODE:/workspace -v $DS/syn:/cache:ro -v $DS:/ds:ro -v $RUN:/workspace/pcdiff/experiments pcdiff:cu128"
 if [ ! -f $RUN/TRAIN_DONE ]; then
-  last=$(ls -t $RUN/harvester_v1/version_*/checkpoints/last.ckpt 2>/dev/null | head -1 || true)
+  last=$(ls -t $RUN/harvester_v1/lightning_logs/version_*/checkpoints/last.ckpt 2>/dev/null | head -1 || true)
   resume=""
   [ -n "$last" ] && resume="-ckpt ${last/$RUN//workspace/pcdiff/experiments}"
   log "training (resume: ${resume:-none})"
@@ -64,7 +64,7 @@ if [ ! -f $RUN/TRAIN_DONE ]; then
 fi
 
 # 5) evaluate the last checkpoint and a few earlier ones
-for ck in $(ls $RUN/harvester_v1/version_*/checkpoints/*.ckpt | grep -E "epoch=(19|39|59)|last" ); do
+for ck in $(ls $RUN/harvester_v1/lightning_logs/version_*/checkpoints/*.ckpt | grep -E "epoch=(19|39|59)|last" ); do
   name=$(basename $ck .ckpt | tr '=' '_')
   out=$RUN/eval/$name
   [ -f $out/summary.json ] && continue
