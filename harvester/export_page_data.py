@@ -74,6 +74,8 @@ def main():
     ap.add_argument('--n-syn', type=int, default=12)
     ap.add_argument('--n-real', type=int, default=16)
     ap.add_argument('--overlays', nargs='*', default=[])
+    ap.add_argument('--scan', default=None, help='folder of quick evals (<name>/summary.json), e.g. checkpoint/sampler scans')
+    ap.add_argument('--hide-eval', nargs='*', default=[], help='eval folder names to leave out of the table')
     a = ap.parse_args()
     rng = np.random.default_rng(0)
     runs = dict(r.split('=', 1) for r in a.run)
@@ -86,6 +88,11 @@ def main():
                 'summary': json.load(open(os.path.join(d, 'summary.json'))),
                 'rows': list(csv.DictReader(open(os.path.join(d, 'metrics.csv'))))}
 
+    for n in a.hide_eval:
+        data['evals'].pop(n, None)
+    if a.scan:
+        data['scan'] = {os.path.basename(os.path.dirname(f)): {k: json.load(open(f))[k] for k in ('syn', 'real')}
+                        for f in glob.glob(os.path.join(a.scan, '*', 'summary.json'))}
     ev = a.ckpt_eval or (sorted(data['evals'])[-1] if data['evals'] else None)
     data['sample_ckpt'] = ev
     if ev:

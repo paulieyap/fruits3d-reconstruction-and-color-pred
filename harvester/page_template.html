@@ -157,9 +157,16 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
       <li><b>Synthetic val</b>: held-out snapshots, procedural GT. Chamfer (mean of both directions), F-score at 2.5 and 5 mm, convex-hull volume error.</li>
       <li><b>Real val</b>: the stacker camera sees the same fruit from about 30° to the side. Its points that lie more than 3 mm from every wrist point are surface the wrist view never saw. "Unseen ≤5 mm" is the share of those points within 5 mm of the completion.</li>
       <li><b>Caveat</b>: the real metric only checks that surface the stacker saw is covered by the completion, not the other way round, so an oversized completion is not penalised. At v2 epoch 4 the real completions are about 15% larger in radius than the sphere fit (median 27.6 vs 23.9 mm), matching the +15% volume error on synthetic data.</li>
-      <li><b>Checkpoints are noisy</b>: training uses a constant learning rate and no weight averaging (EMA), so each checkpoint is one snapshot of drifting weights. Epoch 29 is worse than epoch 4 on synthetic fruits (Chamfer 5.3 vs 2.8 mm): its completions are about 20% too small and sit 11 mm off-centre (epoch 4: 8% and 5 mm). It still beats the sphere on the real unseen side. A scan over all checkpoints is running; the final pick will be by synthetic Chamfer, not by epoch number.</li>
       <li>Values are medians over fruits.</li>
     </ul>
+  </section>
+
+  <section>
+    <span class="eyebrow">Checkpoints and sampler settings</span>
+    <h2>Longer training samples worse</h2>
+    <p>A quick scan on 24 synthetic and 8–16 real val fruits per row. With the default sampler (50 steps, guidance w = 1) the synthetic Chamfer rises from 2.9 mm at epoch 4 to 5–6.5 mm by epoch 29, and the completions shrink (volume +9% → −32%). More solver steps make it worse, not better: each step pulls the points slightly towards the centre, and later checkpoints pull harder. Guidance w = 2 pushes back and restores the size, but no setting brings a late checkpoint back to epoch 4. The in-training validation curve (one fruit, 1000 steps, w = 2) is too noisy to show this.</p>
+    <div class="tbl" id="scan-tbl"></div>
+    <p style="font-size:13px;color:var(--muted)">Next run: EMA weights, a decaying learning rate, and checkpoint selection by synthetic-val Chamfer on ~50 fruits instead of the one-fruit curve. Until then, v2 epoch 4 is the model to use.</p>
   </section>
 
   <section>
@@ -307,6 +314,20 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
       });
     });
     $('eval-tbl').innerHTML = h + `</tbody></table><p style="font-size:13px;color:var(--muted);margin-top:6px">n = ${E[names[0]].summary.syn?.n ?? 0} synthetic, ${E[names[0]].summary.real?.n ?? 0} real fruits per checkpoint. Green = better of the two methods.</p>`;
+  }
+
+  // checkpoint / sampler scan
+  {
+    const S = D.scan || {}, keys = Object.keys(S).sort();
+    const lab = k => { const m = k.match(/^e(\d+)(?:_T(\d+)_w(\d+))?/); return m ? [+m[1], m[2] ? +m[2] : 50, m[3] ? +m[3] : 1] : [k, '', '']; };
+    const rows = keys.map(k => [lab(k), S[k]]).sort((a, b) => a[0][0] - b[0][0] || a[0][1] - b[0][1] || a[0][2] - b[0][2]);
+    if (!rows.length) $('scan-tbl').innerHTML = '<div class="empty">No scan yet.</div>';
+    else {
+      const best = Math.min(...rows.map(r => r[1].syn.ddpm_cd_mm));
+      $('scan-tbl').innerHTML = '<table><thead><tr><th>v2 epoch</th><th>steps</th><th>w</th><th>syn chamfer mm</th><th>syn F@5</th><th>syn volume err %</th><th>real: unseen median mm</th><th>real: unseen ≤5 mm %</th><th>real n</th></tr></thead><tbody>' +
+        rows.map(([l, s]) => `<tr><td>${l[0]}</td><td>${l[1]}</td><td>${l[2]}</td><td class="${s.syn.ddpm_cd_mm === best ? 'win' : ''}">${fmt(s.syn.ddpm_cd_mm, 2)}</td><td>${fmt(s.syn.ddpm_f5)}</td><td>${fmt(s.syn.ddpm_vol_err_pct)}</td><td>${fmt(s.real.ddpm_unseen_med_mm, 2)}</td><td>${fmt(s.real.ddpm_unseen_in5mm_pct)}</td><td>${s.real.n}</td></tr>`).join('') +
+        `</tbody></table><p style="font-size:13px;color:var(--muted);margin-top:6px">Sphere fit on the same synthetic fruits: chamfer ${fmt(rows[0][1].syn.sphere_cd_mm, 2)} mm. Green = best synthetic chamfer.</p>`;
+    }
   }
 
   // 3D viewer (canvas, orthographic, painter-sorted)
