@@ -144,6 +144,7 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
     <ul class="plain" id="eval-notes">
       <li><b>Synthetic val</b>: held-out snapshots, procedural GT. Chamfer (mean of both directions), F-score at 2.5 and 5 mm, convex-hull volume error.</li>
       <li><b>Real val</b>: the stacker camera sees the same fruit from about 30° to the side. Its points that lie more than 3 mm from every wrist point are surface the wrist view never saw. "Unseen ≤5 mm" is the share of those points within 5 mm of the completion.</li>
+      <li><b>Caveat</b>: the real metric only checks that surface the stacker saw is covered by the completion, not the other way round, so an oversized completion is not penalised. At v2 epoch 4 the real completions are about 15% larger in radius than the sphere fit (median 27.6 vs 23.9 mm), which matches the +15% volume error on synthetic data. Treat real hull volumes as upper bounds for now.</li>
       <li>Values are medians over fruits.</li>
     </ul>
   </section>
