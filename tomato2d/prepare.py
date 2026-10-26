@@ -3,19 +3,23 @@ width-keypoint training.
 
 Reads the FiftyOne export (samples.json + data/) directly, without FiftyOne:
 
-  python3 -m tomato2d.prepare TOMATOMAP_ROOT OUT_DIR [--long-side 1333]
+  python3 -m tomato2d.prepare TOMATOMAP_ROOT OUT_DIR [--long-side 1333] [--whole-fruit]
 
 Writes OUT_DIR/images/<name>.jpg (downscaled), OUT_DIR/masks/<name>.npz (bool stack, one mask per fruit)
 and OUT_DIR/annotations.json:
 
   {'classes': [...], 'images': [{'file', 'width', 'height', 'split', 'session', 'capture',
                                  'instances': [{'label', 'bbox' (x0, y0, x1, y1 px), 'width_kp' [[x, y], [x, y]],
-                                                'width_px', 'width_valid', 'solidity', 'area_px'}]}]}
+                                                'width_px', 'width_valid', 'solidity', 'area_px', 'group', 'pieces'}]}]}
 
 Width keypoints: the two ends of the widest horizontal chord of the mask (the camera is held upright
 and fruits hang, so image-horizontal approximates the fruit's equatorial width). They are only trusted
 (`width_valid`) when the mask is compact (solidity >= 0.92) and does not touch the image border;
 occluded or cut-off fruits keep their mask but are excluded from the keypoint loss.
+
+TomatoMAP labels a fruit crossed by a stem or leaf as several pieces that share an `isat_group` id.
+By default each piece is one instance; `--whole-fruit` merges the pieces of a group into one instance
+(label of the largest area; solidity measured after closing the gaps the occluder leaves).
 
 Splits are made per capture session (photos less than 120 s apart), so near-identical shots of one fruit
 cluster never end up in different splits.
@@ -80,7 +84,8 @@ def solidity(mask):
 @click.option('--long-side', default=1333, help='downscale images to this long side (px)')
 @click.option('--seed', default=0)
 @click.option('--split-frac', default=(0.7, 0.15, 0.15), nargs=3, type=float)
-def main(root, out, long_side, seed, split_frac):
+@click.option('--whole-fruit', is_flag=True, help='merge the labelled pieces of each fruit (same isat_group)')
+def main(root, out, long_side, seed, split_frac, whole_fruit):
     os.makedirs(os.path.join(out, 'images'), exist_ok=True)
     os.makedirs(os.path.join(out, 'masks'), exist_ok=True)
     samples = [s for s in json.load(open(os.path.join(root, 'samples.json')))['samples']
@@ -114,19 +119,41 @@ def main(root, out, long_side, seed, split_frac):
         name = os.path.splitext(os.path.basename(s['filepath']))[0]
         cv2.imwrite(os.path.join(out, 'images', name + '.jpg'), cv2.resize(img, (W, H), interpolation=cv2.INTER_AREA),
                     [cv2.IMWRITE_JPEG_QUALITY, 92])
-        masks, inst = [], []
+        pieces = []
         for d in dets:
             m = cv2.resize(full_mask(d, W0, H0).astype(np.uint8), (W, H), interpolation=cv2.INTER_NEAREST).astype(bool)
-            if m.sum() < 16:
-                continue
+            if m.sum() >= 16:
+                pieces.append((d['label'], d.get('isat_group'), m))
+        if whole_fruit:
+            groups = {}
+            for i, (lab, grp, m) in enumerate(pieces):
+                groups.setdefault(('g', grp) if grp is not None else ('p', i), []).append((lab, grp, m))
+            fruits = []
+            for (_, _), ps in groups.items():
+                m = np.logical_or.reduce([p[2] for p in ps])
+                area = {}
+                for lab, _, pm in ps:
+                    area[lab] = area.get(lab, 0) + int(pm.sum())
+                fruits.append((max(area, key=area.get), ps[0][1], m, len(ps)))
+        else:
+            fruits = [(lab, grp, m, 1) for lab, grp, m in pieces]
+
+        masks, inst = [], []
+        for label, grp, m, n_pieces in fruits:
             ys, xs = np.where(m)
             kp, wpx = width_keypoints(m)
-            sol = solidity(m)
+            if n_pieces > 1:  # close the gaps a stem or leaf leaves between the pieces
+                k = max(5, int(round(0.25 * np.sqrt(m.sum()))))
+                sol = solidity(cv2.morphologyEx(m.astype(np.uint8), cv2.MORPH_CLOSE,
+                                                cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))))
+            else:
+                sol = solidity(m)
             border = xs.min() == 0 or ys.min() == 0 or xs.max() == W - 1 or ys.max() == H - 1
             valid = bool(kp is not None and sol >= SOLIDITY_MIN and not border and wpx >= 8)
             masks.append(m)
-            inst.append({'label': d['label'], 'bbox': [float(xs.min()), float(ys.min()), float(xs.max() + 1), float(ys.max() + 1)],
-                         'width_kp': kp, 'width_px': wpx, 'width_valid': valid, 'solidity': sol, 'area_px': int(m.sum())})
+            inst.append({'label': label, 'bbox': [float(xs.min()), float(ys.min()), float(xs.max() + 1), float(ys.max() + 1)],
+                         'width_kp': kp, 'width_px': wpx, 'width_valid': valid, 'solidity': sol, 'area_px': int(m.sum()),
+                         'group': grp, 'pieces': n_pieces})
             n_valid += valid
         if not inst:
             continue
@@ -136,7 +163,8 @@ def main(root, out, long_side, seed, split_frac):
         n_inst += len(inst)
         print(f'[{len(images)}] {name}: {len(inst)} fruits', flush=True)
 
-    json.dump({'classes': FRUIT_CLASSES, 'images': images, 'long_side': long_side, 'solidity_min': SOLIDITY_MIN},
+    json.dump({'classes': FRUIT_CLASSES, 'images': images, 'long_side': long_side, 'solidity_min': SOLIDITY_MIN,
+               'whole_fruit': whole_fruit},
               open(os.path.join(out, 'annotations.json'), 'w'))
     per = {sp: sum(1 for im in images if im['split'] == sp) for sp in ('train', 'val', 'test')}
     print(f'images {len(images)} {per}, fruit instances {n_inst}, width-valid {n_valid}, sessions {session + 1}')
