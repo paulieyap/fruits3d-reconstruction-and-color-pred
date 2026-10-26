@@ -89,6 +89,18 @@ canvas#pc { width: 100%; height: 480px; background: var(--panel); border: 1px so
 .seg button { all: unset; cursor: pointer; padding: 5px 10px; font: 500 12px var(--mono); }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
 .seg button:focus-visible { outline: 2px solid var(--accent); }
+.traj { display: grid; gap: 8px; }
+.traj[hidden] { display: none; }
+.traj .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; }
+.traj input[type=range] { flex: 1 1 160px; accent-color: var(--accent); }
+.traj .play { all: unset; cursor: pointer; padding: 4px 10px; border: 1px solid var(--rule); border-radius: 4px; font: 500 12px var(--mono); }
+.traj .play:focus-visible { outline: 2px solid var(--accent); }
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 6px; }
+.strip button { all: unset; cursor: pointer; display: grid; gap: 2px; border: 1px solid var(--rule); border-radius: 4px; padding: 3px; background: var(--panel); }
+.strip button[aria-pressed="true"] { border-color: var(--accent); }
+.strip button:focus-visible { outline: 2px solid var(--accent); }
+.strip canvas { width: 100%; aspect-ratio: 1; display: block; }
+.strip span { font: 11px var(--mono); color: var(--muted); text-align: center; }
 .meta { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: start; }
 .meta img { width: 150px; border-radius: 4px; }
 .kv { display: grid; grid-template-columns: auto auto; gap: 2px 14px; font: 12px var(--mono); justify-content: start; }
@@ -144,7 +156,8 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
     <ul class="plain" id="eval-notes">
       <li><b>Synthetic val</b>: held-out snapshots, procedural GT. Chamfer (mean of both directions), F-score at 2.5 and 5 mm, convex-hull volume error.</li>
       <li><b>Real val</b>: the stacker camera sees the same fruit from about 30° to the side. Its points that lie more than 3 mm from every wrist point are surface the wrist view never saw. "Unseen ≤5 mm" is the share of those points within 5 mm of the completion.</li>
-      <li><b>Caveat</b>: the real metric only checks that surface the stacker saw is covered by the completion, not the other way round, so an oversized completion is not penalised. At v2 epoch 4 the real completions are about 15% larger in radius than the sphere fit (median 27.6 vs 23.9 mm), which matches the +15% volume error on synthetic data. Treat real hull volumes as upper bounds for now.</li>
+      <li><b>Caveat</b>: the real metric only checks that surface the stacker saw is covered by the completion, not the other way round, so an oversized completion is not penalised. At v2 epoch 4 the real completions are about 15% larger in radius than the sphere fit (median 27.6 vs 23.9 mm), matching the +15% volume error on synthetic data.</li>
+      <li><b>Checkpoints are noisy</b>: training uses a constant learning rate and no weight averaging (EMA), so each checkpoint is one snapshot of drifting weights. Epoch 29 is worse than epoch 4 on synthetic fruits (Chamfer 5.3 vs 2.8 mm): its completions are about 20% too small and sit 11 mm off-centre (epoch 4: 8% and 5 mm). It still beats the sphere on the real unseen side. A scan over all checkpoints is running; the final pick will be by synthetic Chamfer, not by epoch number.</li>
       <li>Values are medians over fruits.</li>
     </ul>
   </section>
@@ -163,6 +176,12 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
           <label><input type="checkbox" id="t-spin" checked> spin</label>
         </div>
         <canvas id="pc" aria-label="3D point cloud, drag to rotate"></canvas>
+        <div class="traj" id="traj" hidden>
+          <div class="row"><b>Denoising</b><button class="play" id="tr-play">play</button>
+            <input type="range" id="tr-step" min="0" max="5" step="1" aria-label="Denoising step shown in the main view"><span id="tr-lab" class="tag"></span></div>
+          <div class="strip" id="strip"></div>
+          <p style="font-size:13px;color:var(--muted);margin:0">The sampler starts from Gaussian noise and runs 50 DPM-Solver steps; shown is the sample after every 10th step (t is the noise level on the 1000-step training schedule). Panels are 120 mm across with the input faded, the main view 75 mm. The last panel is the completion above, on a 1500-point subset. With this linear noise schedule the noise level stays high for most steps, so the fruit only takes shape in the last ten.</p>
+        </div>
         <div class="meta"><div class="kv" id="kv"></div><img id="crop" alt="Wrist camera crop of the selected tomato" hidden></div>
       </div>
     </div>
@@ -293,7 +312,8 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
   // 3D viewer (canvas, orthographic, painter-sorted)
   const dec16 = (b) => { const s = atob(b), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return new Int16Array(u.buffer); };
   const dec8 = (b) => { const s = atob(b), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; };
-  const samples = (D.samples || []).map(s => ({ ...s, _inp: dec16(s.inp), _rgb: dec8(s.inp_rgb), _pred: dec16(s.pred), _oth: dec16(s.other) }));
+  const samples = (D.samples || []).map(s => ({ ...s, _inp: dec16(s.inp), _rgb: dec8(s.inp_rgb), _pred: dec16(s.pred), _oth: dec16(s.other), _traj: (s.traj || []).map(dec16) }));
+  let frame = -1, playTimer = null; // -1 = final completion
   let kind = samples.some(s => s.kind === 'real') ? 'real' : 'syn', cur = null, yaw = 0.6, pitch = -0.35, spin = true, drag = null;
   const cv = $('pc'), ctx = cv.getContext('2d');
   function renderList() {
@@ -316,16 +336,23 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
     if (cur.kind === 'real') kv.push(['unseen points', m.n_unseen], ['pcdiff unseen median', fmt(m.ddpm_unseen_med_mm, 2) + ' mm'], ['sphere unseen median', fmt(m.sphere_unseen_med_mm, 2) + ' mm'], ['pcdiff unseen ≤5 mm', fmt(m.ddpm_unseen_in5mm_pct) + ' %'], ['pcdiff hull volume', fmt(m.ddpm_vol_ml) + ' ml'], ['sphere volume', fmt(m.sphere_vol_ml) + ' ml']);
     else kv.push(['pcdiff Chamfer', fmt(m.ddpm_cd_mm, 2) + ' mm'], ['sphere Chamfer', fmt(m.sphere_cd_mm, 2) + ' mm'], ['pcdiff F@5', fmt(m.ddpm_f5)], ['pcdiff volume err', fmt(m.ddpm_vol_err_pct) + ' %']);
     $('kv').innerHTML = kv.map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join('');
+    setupTraj();
     if (cur.crop) { $('crop').src = 'data:image/jpeg;base64,' + cur.crop; $('crop').hidden = false; } else $('crop').hidden = true;
     draw();
   }
   function draw() {
+    render(cv, ctx, { span: 0.075, pred: frame < 0 || !cur || !cur._traj.length ? cur?._pred : cur._traj[frame], dot: 2.4, bar: true,
+      inp: $('t-inp').checked, oth: $('t-oth').checked, pr: $('t-pred').checked });
+    if (cur && cur._traj.length) $('strip').querySelectorAll('canvas').forEach((c, k) =>
+      render(c, c.getContext('2d'), { span: 0.12, pred: cur._traj[k], dot: 1.4, inp: true, inpAlpha: 0.2, oth: false, pr: true }));
+  }
+  function render(cv, ctx, o) {
     const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
     if (cv.width !== w * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
     if (!cur) return;
     const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
-    const scale = Math.min(w, h) / 0.075 / 1e4; // 75 mm across the shorter side
+    const scale = Math.min(w, h) / o.span / 1e4; // o.span metres across the shorter side
     const pts = [];
     const add = (arr, col, alpha, rgb) => {
       for (let i = 0, j = 0; i < arr.length; i += 3, j++) {
@@ -336,14 +363,42 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
         pts.push([xr, yr, zz, rgb ? `rgb(${rgb[3 * j]},${rgb[3 * j + 1]},${rgb[3 * j + 2]})` : col, alpha]);
       }
     };
-    if ($('t-oth').checked) add(cur._oth, css('--gt'), 0.55);
-    if ($('t-pred').checked) add(cur._pred, css('--accent'), 0.75);
-    if ($('t-inp').checked) add(cur._inp, null, 1, cur._rgb);
+    if (o.oth) add(cur._oth, css('--gt'), 0.55);
+    if (o.pr && o.pred) add(o.pred, css('--accent'), 0.75);
+    if (o.inp) add(cur._inp, null, o.inpAlpha ?? 1, cur._rgb);
     pts.sort((a, b) => b[2] - a[2]);
-    for (const p of pts) { ctx.globalAlpha = p[4]; ctx.fillStyle = p[3]; ctx.fillRect(w / 2 + p[0] * scale - 1.2, h / 2 - p[1] * scale - 1.2, 2.4, 2.4); }
+    const d = o.dot;
+    for (const p of pts) { ctx.globalAlpha = p[4]; ctx.fillStyle = p[3]; ctx.fillRect(w / 2 + p[0] * scale - d / 2, h / 2 - p[1] * scale - d / 2, d, d); }
     ctx.globalAlpha = 1; ctx.fillStyle = css('--muted'); ctx.font = '11px ' + css('--mono');
+    if (!o.bar) return;
     const bar = 0.01 * 1e4 * scale; ctx.fillRect(14, h - 18, bar, 2); ctx.fillText('10 mm', 14, h - 24);
   }
+  function setupTraj() {
+    stopPlay();
+    const n = cur._traj.length;
+    $('traj').hidden = !n;
+    frame = -1;
+    if (!n) return;
+    $('tr-step').max = n - 1; $('tr-step').value = n - 1;
+    $('strip').innerHTML = cur.traj_step.map((st, k) => `<button aria-pressed="false" data-k="${k}"><canvas></canvas><span>${st ? 'step ' + st : 'noise'} · t=${cur.traj_t[k]}</span></button>`).join('');
+    $('strip').querySelectorAll('button').forEach(b => b.onclick = () => setFrame(+b.dataset.k));
+    setFrame(n - 1, true);
+  }
+  function setFrame(k, quiet) {
+    const n = cur._traj.length;
+    frame = k === n - 1 ? -1 : k; // the last frame is the completion itself, shown with all points
+    $('tr-step').value = k;
+    $('tr-lab').textContent = (cur.traj_step[k] ? `step ${cur.traj_step[k]} / 50` : 'initial noise') + ` · t=${cur.traj_t[k]}`;
+    $('strip').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.k === k));
+    if (!quiet) draw();
+  }
+  function stopPlay() { clearInterval(playTimer); playTimer = null; $('tr-play').textContent = 'play'; }
+  $('tr-step').oninput = e => { stopPlay(); setFrame(+e.target.value); };
+  $('tr-play').onclick = () => {
+    if (playTimer) return stopPlay();
+    let k = 0; setFrame(0); $('tr-play').textContent = 'stop';
+    playTimer = setInterval(() => { k++; if (k >= cur._traj.length) return stopPlay(); setFrame(k); }, 700);
+  };
   cv.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY, yaw, pitch]; cv.setPointerCapture(e.pointerId); });
   cv.addEventListener('pointermove', e => { if (!drag) return; yaw = drag[2] + (e.clientX - drag[0]) * 0.01; pitch = Math.max(-1.5, Math.min(1.5, drag[3] + (e.clientY - drag[1]) * 0.01)); draw(); });
   cv.addEventListener('pointerup', () => { drag = null; });
