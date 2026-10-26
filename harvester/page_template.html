@@ -189,7 +189,7 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
           <div class="row"><b>Denoising</b><button class="play" id="tr-play">play</button>
             <input type="range" id="tr-step" min="0" max="5" step="1" aria-label="Denoising step shown in the main view"><span id="tr-lab" class="tag"></span></div>
           <div class="strip" id="strip"></div>
-          <p style="font-size:13px;color:var(--muted);margin:0">The sampler starts from Gaussian noise and runs 50 or 100 DPM-Solver steps (pick the model above); shown is the sample after every 10th step (t is the noise level on the 1000-step training schedule). Panels are 120 mm across with the input faded, the main view 75 mm. The last panel is the completion above, on a 1500-point subset. With this linear noise schedule the noise level stays high for most steps, so the fruit only takes shape near the end.</p>
+          <p style="font-size:13px;color:var(--muted);margin:0">The sampler starts from Gaussian noise and runs 50 or 100 DPM-Solver steps (pick the model above); shown is the sample after every 10th step (t is the noise level on the 1000-step training schedule). Panels are 120 mm across with the input faded, the main view 75 mm. The last panel is the completion above, on a 1000-point subset. With this linear noise schedule the noise level stays high for most steps, so the fruit only takes shape near the end.</p>
         </div>
         <div class="meta"><div class="kv" id="kv"></div><img id="crop" alt="Wrist camera crop of the selected tomato" hidden></div>
       </div>
