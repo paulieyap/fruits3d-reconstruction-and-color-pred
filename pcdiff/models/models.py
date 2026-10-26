@@ -130,6 +130,10 @@ class DiffusionPoints(LightningModule):
     def p_sample_loop(self, x_t, x_cond, x_uncond, gt_pts, x_mean, x_std, batch_idx, step_callback=None):
         # step_callback(i, x_t): optional, called after every denoising step (e.g. to record the trajectory)
         pcd = o3d.geometry.PointCloud()
+        # the multistep solver keeps the previous model outputs (model_outputs, lower_order_nums) until
+        # set_timesteps is called again; without this every call after the first starts from the last
+        # batch's history (and crashes when the batch size changes)
+        self.dpm_scheduler.set_timesteps(self.s_steps)
         self.scheduler_to_cuda()
 
         for i in tqdm(range(len(self.dpm_scheduler.timesteps))):
