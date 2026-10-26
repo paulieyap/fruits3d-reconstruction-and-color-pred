@@ -1,0 +1,349 @@
+<title>Harvester Tomato Completion</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column (max 1120px) of report sections; the 3D viewer breaks into a two-pane tool. */
+:root {
+  --bg: #f6f4f7;          /* greenhouse film under grow light, faint magenta bias */
+  --panel: #ffffff;
+  --ink: #1d1a21;
+  --muted: #645d6b;
+  --rule: #e2dde6;
+  --accent: #c8402b;      /* tomato: model prediction */
+  --gt: #2a7a83;          /* ground truth / held-out view */
+  --input: #8a6a1f;       /* observed input when drawn flat */
+  --good: #2f7d4a;
+  --warn: #a96a12;
+  --chip: #efe9f2;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141217; --panel: #1d1a21; --ink: #ece8ef; --muted: #a59dab; --rule: #34303a;
+    --accent: #f06a50; --gt: #5cc0c8; --input: #d6b25e; --good: #6cc48a; --warn: #e0a54a; --chip: #2a2530;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141217; --panel: #1d1a21; --ink: #ece8ef; --muted: #a59dab; --rule: #34303a;
+  --accent: #f06a50; --gt: #5cc0c8; --input: #d6b25e; --good: #6cc48a; --warn: #e0a54a; --chip: #2a2530;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--body); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 44px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(30px, 5vw, 46px); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 24px; font-weight: 700; }
+h3 { font-size: 16px; font-weight: 500; }
+p { margin: 0; max-width: 68ch; }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+section { display: grid; gap: 16px; min-width: 0; }
+header { display: grid; gap: 14px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font: 500 12px/1 var(--mono); background: var(--chip); color: var(--ink); padding: 7px 10px; border-radius: 999px; }
+.chip.state-run { color: var(--warn); }
+.chip.state-done { color: var(--good); }
+.mono, code { font-family: var(--mono); font-size: 13px; }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; counter-reset: s; }
+.step { border-top: 2px solid var(--ink); padding-top: 10px; display: grid; gap: 6px; }
+.step b { font: 500 12px/1 var(--mono); color: var(--muted); }
+.step p { font-size: 14px; color: var(--muted); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+.figure { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 14px; display: grid; gap: 8px; min-width: 0; }
+.figure .cap { font-size: 13px; color: var(--muted); }
+.figure img { display: block; width: 100%; border-radius: 3px; }
+.stats { display: flex; flex-wrap: wrap; gap: 28px; }
+.stat { display: grid; gap: 2px; }
+.stat .v { font: 700 28px/1 var(--display); font-variant-numeric: tabular-nums; }
+.stat .k { font-size: 13px; color: var(--muted); }
+svg text { fill: var(--muted); font: 11px var(--mono); }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 14px; }
+th, td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { font: 500 12px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+td.win { color: var(--good); font-weight: 600; }
+.viewer { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; }
+@media (max-width: 760px) { .viewer { grid-template-columns: 1fr; } }
+.list { display: grid; gap: 6px; max-height: 560px; overflow: auto; align-content: start; }
+.list button { all: unset; cursor: pointer; display: grid; grid-template-columns: 44px 1fr; gap: 8px; align-items: center;
+  padding: 6px; border-radius: 4px; border: 1px solid transparent; font-size: 12px; }
+.list button:hover { background: var(--chip); }
+.list button[aria-pressed="true"] { border-color: var(--accent); background: var(--chip); }
+.list button:focus-visible { outline: 2px solid var(--accent); }
+.list .thumb { width: 44px; height: 44px; border-radius: 3px; object-fit: cover; background: var(--chip); }
+.list .tag { font: 500 10px/1 var(--mono); color: var(--muted); }
+.stage { display: grid; gap: 10px; min-width: 0; }
+canvas#pc { width: 100%; height: 480px; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; touch-action: none; cursor: grab; }
+.controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: 13px; }
+.controls label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+.seg button { all: unset; cursor: pointer; padding: 5px 10px; font: 500 12px var(--mono); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.seg button:focus-visible { outline: 2px solid var(--accent); }
+.meta { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: start; }
+.meta img { width: 150px; border-radius: 4px; }
+.kv { display: grid; grid-template-columns: auto auto; gap: 2px 14px; font: 12px var(--mono); justify-content: start; }
+.kv span:nth-child(odd) { color: var(--muted); }
+.note { border-left: 3px solid var(--warn); padding: 4px 0 4px 12px; color: var(--ink); }
+ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 6px; max-width: 72ch; }
+pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 12px; overflow-x: auto; margin: 0; font: 12.5px/1.5 var(--mono); }
+.empty { color: var(--muted); font-size: 14px; padding: 18px; border: 1px dashed var(--rule); border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">pcdiff · harvester 003 · k-ws5090-01</span>
+    <h1>Completing tomatoes the harvester only sees from the front</h1>
+    <p>A point-cloud diffusion model (pcdiff, MinkUNet DDPM) trained to predict the whole tomato from one stereo view taken at the harvester's capture pose. Inputs are real: SAM 3 tomato masks on the wrist and stacker ZED images, lifted to 3D with their stereo depth and real colours. XYZ is the target for now; colour is only supervised where the camera saw the fruit.</p>
+    <div class="chips" id="chips"></div>
+  </header>
+
+  <section>
+    <span class="eyebrow">Pipeline</span>
+    <h2>From execution snapshots to a completion model</h2>
+    <div class="steps">
+      <div class="step"><b>1 · extract</b><h3>Snapshot mcap → RGB-D views</h3><p>Wrist + stacker ZED colour, RVL-compressed depth, confidence and the TF chain to the world frame, one frame per camera per snapshot.</p></div>
+      <div class="step"><b>2 · segment</b><h3>SAM 3, prompt "tomato"</h3><p>Zero-shot instance masks. Fruits cut by the border, under 1500 px or with too little valid depth are dropped.</p></div>
+      <div class="step"><b>3 · ground truth</b><h3>Procedural tomato at the real fruit</h3><p>The back is never observed, so a lobed, stem-up spheroid is placed at the sphere fit of each real fruit and ray-cast through its real mask from the real camera, with ZED-like noise.</p></div>
+      <div class="step"><b>4 · train + test</b><h3>pcdiff, partial-centred</h3><p>Trained on the procedural GT. Tested on real wrist views against the stacker camera's view of the same fruit.</p></div>
+    </div>
+  </section>
+
+  <section id="data-sec">
+    <span class="eyebrow">Dataset</span>
+    <h2>What went in</h2>
+    <div class="stats" id="ds-stats"></div>
+    <div id="overlays" class="grid2"></div>
+    <div class="grid2">
+      <div class="figure"><h3>Fitted fruit radius</h3><div id="h-r"></div><span class="cap">Sphere fit on each real partial (mm). The procedural GT is scaled to this ±10 %.</span></div>
+      <div class="figure"><h3>Distance from camera</h3><div id="h-d"></div><span class="cap">Median depth of each fruit's points (m).</span></div>
+    </div>
+  </section>
+
+  <section>
+    <span class="eyebrow">Training · TensorBoard scalars</span>
+    <h2>Training curves</h2>
+    <div class="grid2" id="curves"></div>
+    <p class="cap" style="color:var(--muted);font-size:13px">Validation runs the full denoising loop on one fixed val fruit per epoch, so its curves are noisy and only show training health. The evaluation below uses hundreds of fruits.</p>
+  </section>
+
+  <section>
+    <span class="eyebrow">Evaluation</span>
+    <h2>DDPM against a sphere fitted to the same view</h2>
+    <div class="tbl" id="eval-tbl"></div>
+    <ul class="plain" id="eval-notes">
+      <li><b>Synthetic val</b>: held-out snapshots, procedural GT. Chamfer (mean of both directions), F-score at 2.5 and 5 mm, convex-hull volume error.</li>
+      <li><b>Real val</b>: the stacker camera sees the same fruit from about 30° to the side. Its points that lie more than 3 mm from every wrist point are surface the wrist view never saw. "Unseen ≤5 mm" is the share of those points within 5 mm of the completion.</li>
+      <li>Values are medians over fruits.</li>
+    </ul>
+  </section>
+
+  <section>
+    <span class="eyebrow">Point clouds</span>
+    <h2>Look at the completions</h2>
+    <div class="viewer">
+      <div class="list" id="list" role="listbox" aria-label="Samples"></div>
+      <div class="stage">
+        <div class="controls">
+          <span class="seg" role="group" aria-label="Sample set"><button id="f-real" aria-pressed="true">real</button><button id="f-syn" aria-pressed="false">synthetic</button></span>
+          <label><input type="checkbox" id="t-inp" checked> <span class="sw" style="background:var(--input)"></span> input view (real colour)</label>
+          <label><input type="checkbox" id="t-pred" checked> <span class="sw" style="background:var(--accent)"></span> completion</label>
+          <label><input type="checkbox" id="t-oth" checked> <span class="sw" style="background:var(--gt)"></span> <span id="oth-name">stacker view (held out)</span></label>
+          <label><input type="checkbox" id="t-spin" checked> spin</label>
+        </div>
+        <canvas id="pc" aria-label="3D point cloud, drag to rotate"></canvas>
+        <div class="meta"><div class="kv" id="kv"></div><img id="crop" alt="Wrist camera crop of the selected tomato" hidden></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <span class="eyebrow">Read before using the numbers</span>
+    <h2>Limits of v1</h2>
+    <ul class="plain">
+      <li>The complete shapes are procedural. The model learns the occlusion, depth noise and colour of the real views, but its idea of the back side comes from the generator (spheroid, 0.72–0.97 height/width, up to 7 % lobing, stem dimple). There is no measured whole-fruit truth from the harvester yet.</li>
+      <li>The real held-out check only covers the side the stacker camera adds, not the true back.</li>
+      <li>The arm and stacker cameras disagree by about 9 cm in the TF tree (consistent per snapshot). Real pairs are aligned per snapshot by voting on fruit centres, then ICP; pairs without a consistent offset are skipped.</li>
+      <li>Training is per fruit. A truss is the set of its fruits' completions; peduncle and stems are not modelled.</li>
+    </ul>
+  </section>
+
+  <section>
+    <span class="eyebrow">Reproduce</span>
+    <h2>Where everything is</h2>
+    <pre id="repro"></pre>
+  </section>
+</div>
+
+<script id="page-data" type="application/json">/*__DATA__*/</script>
+<script>
+(() => {
+  const D = JSON.parse(document.getElementById('page-data').textContent);
+  const $ = (id) => document.getElementById(id);
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const fmt = (v, d = 1) => (v === undefined || v === null || v === '' || isNaN(+v)) ? '–' : (+v).toFixed(d);
+
+  // header chips
+  const st = D.status || {};
+  const chips = [[st.state === 'done' ? 'training finished' : `training · epoch ${st.epoch ?? '?'} / ${st.max_epoch ?? '?'}`, st.state === 'done' ? 'state-done' : 'state-run'],
+    [`updated ${st.updated || ''}`, ''], [`branch harvester-pcdiff · ${st.commit || ''}`, ''], [`checkpoint shown: ${D.sample_ckpt || 'none yet'}`, '']];
+  $('chips').innerHTML = chips.map(([t, c]) => `<span class="chip ${c}">${t}</span>`).join('');
+
+  // dataset
+  const ds = D.dataset || {};
+  const stat = (v, k) => `<div class="stat"><span class="v">${v}</span><span class="k">${k}</span></div>`;
+  $('ds-stats').innerHTML = [
+    stat(ds.snapshots ?? '–', 'snapshots with tomatoes'), stat(ds.n_views ?? '–', 'camera views segmented'),
+    stat((ds.syn_train ?? 0).toLocaleString(), 'training fruits'), stat((ds.syn_val ?? 0).toLocaleString(), 'synthetic val fruits'),
+    stat(ds.real_val ?? '–', 'real wrist + stacker val pairs'), stat((ds.days || []).length, 'capture days, Aug – Oct 2026')].join('');
+  $('overlays').innerHTML = (D.overlays || []).map(o => `<div class="figure"><img src="data:image/jpeg;base64,${o.jpg}" alt="Camera view and SAM 3 tomato masks"><span class="cap">${o.view.replace('zed_', '')} · ${o.n} tomato instances (left raw, right SAM 3)</span></div>`).join('');
+
+  function hist(el, counts, x0, dx, unit) {
+    const W = 460, H = 150, L = 34, B = 22, max = Math.max(1, ...counts), bw = (W - L - 6) / counts.length;
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img">`;
+    for (let i = 0; i <= 2; i++) { const y = H - B - (H - B - 8) * i / 2; s += `<line x1="${L}" x2="${W - 6}" y1="${y}" y2="${y}" stroke="${css('--rule')}"/><text x="${L - 4}" y="${y + 4}" text-anchor="end">${Math.round(max * i / 2)}</text>`; }
+    counts.forEach((c, i) => { const h = (H - B - 8) * c / max; s += `<rect x="${L + i * bw + 1}" y="${H - B - h}" width="${bw - 2}" height="${h}" fill="${css('--gt')}"/>`; });
+    const ticks = 5; for (let i = 0; i <= ticks; i++) { const k = Math.round(i * counts.length / ticks); s += `<text x="${L + k * bw}" y="${H - 6}" text-anchor="middle">${+(x0 + k * dx).toFixed(2)}</text>`; }
+    el.innerHTML = s + '</svg>';
+  }
+  if (ds.r_hist) hist($('h-r'), ds.r_hist, 12, 1, 'mm');
+  if (ds.depth_hist) hist($('h-d'), ds.depth_hist, 0.2, 0.05, 'm');
+
+  // curves
+  function line(title, series, opts = {}) {
+    const W = 520, H = 220, L = 52, R = 12, T = 10, B = 28;
+    const all = series.flatMap(s => s.pts);
+    if (!all.length) return `<div class="figure"><h3>${title}</h3><div class="empty">No points logged yet.</div></div>`;
+    const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
+    let x0 = Math.min(...xs), x1 = Math.max(...xs); if (x1 === x0) x1 = x0 + 1;
+    let y0 = opts.y0 ?? Math.min(...ys), y1 = opts.y1 ?? Math.max(...ys);
+    if (opts.clipq) { const sy = [...ys].sort((a, b) => a - b); y1 = sy[Math.floor(sy.length * opts.clipq)]; y0 = Math.min(y0, sy[0]); }
+    if (y1 === y0) y1 = y0 + 1;
+    const X = x => L + (W - L - R) * (x - x0) / (x1 - x0), Y = y => T + (H - T - B) * (1 - (Math.min(y, y1) - y0) / (y1 - y0));
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${title}">`;
+    for (let i = 0; i <= 4; i++) { const v = y0 + (y1 - y0) * i / 4, y = Y(v); s += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="${css('--rule')}"/><text x="${L - 6}" y="${y + 4}" text-anchor="end">${opts.fmt ? opts.fmt(v) : v.toPrecision(3)}</text>`; }
+    for (let i = 0; i <= 4; i++) { const v = x0 + (x1 - x0) * i / 4; s += `<text x="${X(v)}" y="${H - 8}" text-anchor="middle">${Math.round(v)}</text>`; }
+    s += `<text x="${W - R}" y="${H - 8 - 12}" text-anchor="end">${opts.xlabel || ''}</text>`;
+    series.forEach(sr => {
+      if (sr.raw) s += `<polyline fill="none" stroke="${sr.color}" stroke-opacity="0.25" stroke-width="1" points="${sr.raw.map(p => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(' ')}"/>`;
+      s += `<polyline fill="none" stroke="${sr.color}" stroke-width="2" points="${sr.pts.map(p => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(' ')}"/>`;
+      const e = sr.pts[sr.pts.length - 1]; s += `<circle cx="${X(e[0])}" cy="${Y(e[1])}" r="3.5" fill="${sr.color}"/>`;
+    });
+    const leg = series.map(sr => `<span style="display:inline-flex;gap:6px;align-items:center"><span class="sw" style="background:${sr.color}"></span>${sr.name}</span>`).join(' ');
+    return `<div class="figure"><h3>${title}</h3>${s}</svg><span class="cap" style="display:flex;gap:14px;flex-wrap:wrap">${leg}${opts.cap ? ' · ' + opts.cap : ''}</span></div>`;
+  }
+  const C = D.curves || {};
+  const ema = (pts, a = 0.9) => { let m = null; return pts.map(p => [p[0], m = m === null ? p[1] : a * m + (1 - a) * p[1]]); };
+  const byStep = (tag) => (C[tag] || []).map(r => [r[0], r[2]]);
+  const byEpoch = (tag) => (C[tag] || []).filter(r => r[1] !== null).map(r => [r[1], r[2]]);
+  const lx = byStep('train/loss_xyz'), lr = byStep('train/loss_rgb');
+  $('curves').innerHTML = [
+    line('Denoising loss (MSE on noise)', [{ name: 'xyz', color: css('--accent'), pts: ema(lx), raw: lx }, { name: 'rgb (seen points)', color: css('--gt'), pts: ema(lr), raw: lr }], { xlabel: 'step', clipq: 0.98, cap: 'smoothed, raw faint' }),
+    line('Validation Chamfer (one fruit, cumulative)', [{ name: 'cd_mean', color: css('--accent'), pts: byEpoch('val/cd_mean') }], { xlabel: 'epoch' }),
+    line('Validation F-score (one fruit, cumulative)', [{ name: 'fscore', color: css('--accent'), pts: byEpoch('val/fscore') }, { name: 'precision', color: css('--gt'), pts: byEpoch('val/precision') }, { name: 'recall', color: css('--input'), pts: byEpoch('val/recall') }], { xlabel: 'epoch' }),
+  ].join('');
+
+  // eval table
+  const E = D.evals || {};
+  const names = Object.keys(E).sort((a, b) => (a === 'last') - (b === 'last') || a.localeCompare(b, undefined, { numeric: true }));
+  if (!names.length) { $('eval-tbl').innerHTML = '<div class="empty">Evaluation runs after training. Checkpoints at epochs 20, 40, 60 and the last one are scored on 300 synthetic val fruits and every real val pair.</div>'; }
+  else {
+    const cols = [['syn', 'cd_mm', 'Chamfer mm', 2, 'low'], ['syn', 'f2.5', 'F@2.5 mm', 1, 'high'], ['syn', 'f5', 'F@5 mm', 1, 'high'], ['syn', 'vol_err_pct', 'volume err %', 1, 'abs'],
+      ['real', 'unseen_med_mm', 'real: unseen median mm', 2, 'low'], ['real', 'unseen_in5mm_pct', 'real: unseen ≤5 mm %', 1, 'high']];
+    let h = '<table><thead><tr><th>checkpoint</th><th>method</th>' + cols.map(c => `<th>${c[2]}</th>`).join('') + '</tr></thead><tbody>';
+    names.forEach(n => {
+      const S = E[n].summary;
+      ['ddpm', 'sphere'].forEach(m => {
+        h += `<tr><td>${m === 'ddpm' ? n.replace('harvester_v1_', '') : ''}</td><td>${m === 'ddpm' ? 'pcdiff' : 'sphere fit'}</td>`;
+        cols.forEach(([k, key, , d, better]) => {
+          const v = S[k]?.[`${m}_${key}`], o = S[k]?.[`${m === 'ddpm' ? 'sphere' : 'ddpm'}_${key}`];
+          let win = false; if (v !== undefined && o !== undefined) win = better === 'low' ? v < o : better === 'high' ? v > o : Math.abs(v) < Math.abs(o);
+          h += `<td class="${win ? 'win' : ''}">${fmt(v, d)}</td>`;
+        });
+        h += '</tr>';
+      });
+    });
+    $('eval-tbl').innerHTML = h + `</tbody></table><p style="font-size:13px;color:var(--muted);margin-top:6px">n = ${E[names[0]].summary.syn?.n ?? 0} synthetic, ${E[names[0]].summary.real?.n ?? 0} real fruits per checkpoint. Green = better of the two methods.</p>`;
+  }
+
+  // 3D viewer (canvas, orthographic, painter-sorted)
+  const dec16 = (b) => { const s = atob(b), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return new Int16Array(u.buffer); };
+  const dec8 = (b) => { const s = atob(b), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; };
+  const samples = (D.samples || []).map(s => ({ ...s, _inp: dec16(s.inp), _rgb: dec8(s.inp_rgb), _pred: dec16(s.pred), _oth: dec16(s.other) }));
+  let kind = samples.some(s => s.kind === 'real') ? 'real' : 'syn', cur = null, yaw = 0.6, pitch = -0.35, spin = true, drag = null;
+  const cv = $('pc'), ctx = cv.getContext('2d');
+  function renderList() {
+    const items = samples.filter(s => s.kind === kind);
+    $('f-real').setAttribute('aria-pressed', kind === 'real'); $('f-syn').setAttribute('aria-pressed', kind === 'syn');
+    $('oth-name').textContent = kind === 'real' ? 'stacker view (held out)' : 'complete ground truth';
+    if (!items.length) { $('list').innerHTML = '<div class="empty">No evaluated samples yet. They appear after the first checkpoint evaluation.</div>'; cur = null; draw(); return; }
+    $('list').innerHTML = items.map((s, i) => {
+      const m = s.metrics, line2 = s.kind === 'real' ? `unseen ${fmt(m.ddpm_unseen_med_mm)} mm · sphere ${fmt(m.sphere_unseen_med_mm)}` : `CD ${fmt(m.ddpm_cd_mm, 2)} · F5 ${fmt(m['ddpm_f5'])}`;
+      const th = s.crop ? `<img class="thumb" src="data:image/jpeg;base64,${s.crop}" alt="">` : `<span class="thumb"></span>`;
+      return `<button role="option" data-id="${s.id}" aria-pressed="false">${th}<span><span class="tag">${s.id.slice(0, 15)}</span><br>${line2}</span></button>`;
+    }).join('');
+    $('list').querySelectorAll('button').forEach(b => b.onclick = () => select(b.dataset.id));
+    select(items[0].id);
+  }
+  function select(id) {
+    cur = samples.find(s => s.id === id);
+    $('list').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === id));
+    const m = cur.metrics, kv = [['sample', cur.id], ['input points', m.n_in], ['sphere radius', fmt(m.r_sphere_mm) + ' mm']];
+    if (cur.kind === 'real') kv.push(['unseen points', m.n_unseen], ['pcdiff unseen median', fmt(m.ddpm_unseen_med_mm, 2) + ' mm'], ['sphere unseen median', fmt(m.sphere_unseen_med_mm, 2) + ' mm'], ['pcdiff unseen ≤5 mm', fmt(m.ddpm_unseen_in5mm_pct) + ' %'], ['pcdiff hull volume', fmt(m.ddpm_vol_ml) + ' ml'], ['sphere volume', fmt(m.sphere_vol_ml) + ' ml']);
+    else kv.push(['pcdiff Chamfer', fmt(m.ddpm_cd_mm, 2) + ' mm'], ['sphere Chamfer', fmt(m.sphere_cd_mm, 2) + ' mm'], ['pcdiff F@5', fmt(m.ddpm_f5)], ['pcdiff volume err', fmt(m.ddpm_vol_err_pct) + ' %']);
+    $('kv').innerHTML = kv.map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join('');
+    if (cur.crop) { $('crop').src = 'data:image/jpeg;base64,' + cur.crop; $('crop').hidden = false; } else $('crop').hidden = true;
+    draw();
+  }
+  function draw() {
+    const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== w * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+    if (!cur) return;
+    const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+    const scale = Math.min(w, h) / 0.075 / 1e4; // 75 mm across the shorter side
+    const pts = [];
+    const add = (arr, col, alpha, rgb) => {
+      for (let i = 0, j = 0; i < arr.length; i += 3, j++) {
+        // camera frame: x right, y down, z forward -> show y up
+        const x = arr[i], y = -arr[i + 1], z = arr[i + 2];
+        const xr = cy * x + sy * z, zr = -sy * x + cy * z;
+        const yr = cp * y - sp * zr, zz = sp * y + cp * zr;
+        pts.push([xr, yr, zz, rgb ? `rgb(${rgb[3 * j]},${rgb[3 * j + 1]},${rgb[3 * j + 2]})` : col, alpha]);
+      }
+    };
+    if ($('t-oth').checked) add(cur._oth, css('--gt'), 0.55);
+    if ($('t-pred').checked) add(cur._pred, css('--accent'), 0.75);
+    if ($('t-inp').checked) add(cur._inp, null, 1, cur._rgb);
+    pts.sort((a, b) => b[2] - a[2]);
+    for (const p of pts) { ctx.globalAlpha = p[4]; ctx.fillStyle = p[3]; ctx.fillRect(w / 2 + p[0] * scale - 1.2, h / 2 - p[1] * scale - 1.2, 2.4, 2.4); }
+    ctx.globalAlpha = 1; ctx.fillStyle = css('--muted'); ctx.font = '11px ' + css('--mono');
+    const bar = 0.01 * 1e4 * scale; ctx.fillRect(14, h - 18, bar, 2); ctx.fillText('10 mm', 14, h - 24);
+  }
+  cv.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY, yaw, pitch]; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', e => { if (!drag) return; yaw = drag[2] + (e.clientX - drag[0]) * 0.01; pitch = Math.max(-1.5, Math.min(1.5, drag[3] + (e.clientY - drag[1]) * 0.01)); draw(); });
+  cv.addEventListener('pointerup', () => { drag = null; });
+  ['t-inp', 't-pred', 't-oth'].forEach(id => $(id).onchange = draw);
+  $('t-spin').onchange = e => { spin = e.target.checked; };
+  $('f-real').onclick = () => { kind = 'real'; renderList(); };
+  $('f-syn').onclick = () => { kind = 'syn'; renderList(); };
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) { spin = false; $('t-spin').checked = false; }
+  const tick = () => { if (spin && !drag && cur) { yaw += 0.006; draw(); } requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+  window.addEventListener('resize', draw);
+  renderList();
+
+  $('repro').textContent = D.repro || '';
+})();
+</script>
