@@ -168,7 +168,7 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
     <p>A quick scan on 24 synthetic and 8–16 real val fruits per row. With the default sampler (50 steps, guidance w = 1) the synthetic Chamfer rises from 2.9 mm at epoch 4 to 5–6.5 mm by epoch 29, and the completions shrink (volume +9% → −32%). More solver steps make it worse, not better: each step pulls the points slightly towards the centre, and later checkpoints pull harder. Guidance w = 2 pushes back and restores the size, but no setting brings a late checkpoint back to epoch 4. The in-training validation curve (8 fruits, 1000 steps, w = 2) is too noisy to show this.</p>
     <p>Full evaluation at 100 steps (100 synthetic, 157 real fruits): epoch 4 with w = 1 drops from 2.80 to 3.46 mm Chamfer (the sphere's level) and from 1.89 to 3.01 mm on the real unseen side; epoch 29 with w = 2 reaches 3.50 mm and 3.47 mm. Both still beat the sphere on real fruits (4.58 mm), and w = 2 keeps the size right (volume −3%). Compare them in the 3D viewer below with the model selector.</p>
     <div class="tbl" id="scan-tbl"></div>
-    <p style="font-size:13px;color:var(--muted)">Next run: EMA weights, a decaying learning rate, and checkpoint selection by synthetic-val Chamfer on ~50 fruits instead of the one-fruit curve. Until then, v2 epoch 4 is the model to use.</p>
+    <p style="font-size:13px;color:var(--muted)">Queued as v3 (starts when v2 training ends, results on a separate page): EMA weights, a cosine-decaying learning rate, and the best checkpoints picked by Chamfer on 48 fixed val fruits sampled like the evaluation. Until then, v2 epoch 4 at 50 steps is the model to use.</p>
   </section>
 
   <section>
