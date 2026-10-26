@@ -13,7 +13,9 @@ import torchvision.transforms.functional as TF
 class TomatoSeg(Dataset):
     """image (3, H, W) float in [0, 1]; target with boxes (N, 4) xyxy, labels (N,) in 1..5,
     masks (N, H, W) uint8, keypoints (N, 2, 3) = two width endpoints (x, y, visibility), visibility 0
-    where the width is not trusted (occluded or cut off), so those fruits add no keypoint loss."""
+    where the width is not trusted (occluded or cut off), so those fruits add no keypoint loss.
+    A label outside `classes` (e.g. 'tomato' from tomato2d/prepare_views.py) means ripeness unknown and maps to
+    len(classes) + 1."""
 
     def __init__(self, root, split, train=False):
         ann = json.load(open(os.path.join(root, 'annotations.json')))
@@ -28,7 +30,8 @@ class TomatoSeg(Dataset):
         img = TF.to_tensor(Image.open(os.path.join(self.root, 'images', im['file'] + '.jpg')).convert('RGB'))
         masks = torch.from_numpy(np.load(os.path.join(self.root, 'masks', im['file'] + '.npz'))['masks'].astype(np.uint8))
         boxes = torch.tensor([x['bbox'] for x in im['instances']], dtype=torch.float32)
-        labels = torch.tensor([self.classes.index(x['label']) + 1 for x in im['instances']], dtype=torch.int64)
+        labels = torch.tensor([self.classes.index(x['label']) + 1 if x['label'] in self.classes else len(self.classes) + 1
+                               for x in im['instances']], dtype=torch.int64)
         kps = torch.zeros(len(im['instances']), 2, 3)
         for k, x in enumerate(im['instances']):
             if x['width_kp'] is not None:

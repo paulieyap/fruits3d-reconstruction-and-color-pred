@@ -84,7 +84,8 @@ def evaluate(model, dataset, device='cuda', score_thr=0.5, iou_thr=0.5, keep_ins
         fn += len(gt) - len(matches)
         for p, g in matches:
             ious.append(float(iou[p, g]))
-            cls_ok.append(int(out['labels'][p]) == int(t['labels'][g]))
+            if int(t['labels'][g]) <= len(dataset.classes):  # skip fruits of unknown ripeness
+                cls_ok.append(int(out['labels'][p]) == int(t['labels'][g]))
             if bool(t['width_valid'][g]):
                 gw = float(torch.linalg.norm(t['keypoints'][g, 1, :2] - t['keypoints'][g, 0, :2]))
                 kp = out['keypoints'][p, :, :2]

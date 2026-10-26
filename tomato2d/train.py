@@ -1,8 +1,13 @@
 """Train the tomato mask + width-keypoint model on TomatoMAP-Seg (prepared by tomato2d/prepare.py).
 
   python3 -m tomato2d.train DATA_DIR OUT_DIR [--epochs 40] [--batch-size 4] [--max-iters N]
+                            [--extra DIR ...] [--init CKPT]
 
-Writes OUT_DIR/last.pt, OUT_DIR/best.pt (best val AP@0.5) and OUT_DIR/metrics.csv (one row per evaluation).
+--extra adds the train split of another prepared set (e.g. tomato2d/prepare_views.py pseudo-labels) and scores its
+val split too; --init starts from a checkpoint (fine-tuning) instead of COCO weights.
+
+Writes OUT_DIR/last.pt, OUT_DIR/best.pt (best val AP@0.5, averaged over the val sets) and OUT_DIR/metrics.csv
+(one row per evaluation; columns of an extra val set are prefixed x1_, x2_, ...).
 COCO-pretrained weights are downloaded to $TORCH_HOME on first use.
 """
 import csv
@@ -12,7 +17,7 @@ import time
 
 import click
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import ConcatDataset, DataLoader
 
 from tomato2d.data import TomatoSeg, collate
 from tomato2d.metrics import evaluate
@@ -29,14 +34,21 @@ from tomato2d.model import build_model, model_targets
 @click.option('--workers', default=4)
 @click.option('--max-iters', default=0, help='stop after this many iterations (smoke test)')
 @click.option('--seed', default=0)
-def main(data, out, epochs, batch_size, lr, eval_every, workers, max_iters, seed):
+@click.option('--extra', multiple=True, help='another prepared data dir to train and validate on')
+@click.option('--init', default=None, help='checkpoint to start from')
+def main(data, out, epochs, batch_size, lr, eval_every, workers, max_iters, seed, extra, init):
     torch.manual_seed(seed)
     os.makedirs(out, exist_ok=True)
     dev = 'cuda'
-    train_ds, val_ds = TomatoSeg(data, 'train', train=True), TomatoSeg(data, 'val')
+    train_sets = [TomatoSeg(d, 'train', train=True) for d in (data, *extra)]
+    vals = [('', TomatoSeg(data, 'val'))] + [(f'x{i + 1}_', TomatoSeg(d, 'val')) for i, d in enumerate(extra)]
+    classes = train_sets[0].classes
+    train_ds = ConcatDataset(train_sets)
     loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=workers, collate_fn=collate,
                         persistent_workers=workers > 0, drop_last=True)
-    model = build_model(num_classes=len(train_ds.classes)).to(dev)
+    model = build_model(num_classes=len(classes), pretrained=init is None).to(dev)
+    if init:
+        model.load_state_dict(torch.load(init, map_location=dev, weights_only=False)['model'])
     params = [p for p in model.parameters() if p.requires_grad]
     opt = torch.optim.SGD(params, lr=lr, momentum=0.9, weight_decay=1e-4)
     total = epochs * len(loader)
@@ -44,7 +56,8 @@ def main(data, out, epochs, batch_size, lr, eval_every, workers, max_iters, seed
     sched = torch.optim.lr_scheduler.LambdaLR(
         opt, lambda i: (i + 1) / warm if i < warm else 0.5 * (1 + math.cos(math.pi * (i - warm) / max(1, total - warm))))
     scaler = torch.amp.GradScaler('cuda')
-    print(f'train {len(train_ds)} images ({len(loader)} it/epoch), val {len(val_ds)}', flush=True)
+    print(f'train {[len(t) for t in train_sets]} images ({len(loader)} it/epoch), val {[len(v) for _, v in vals]}',
+          flush=True)
 
     best, it, rows = -1.0, 0, []
     for ep in range(epochs):
@@ -73,16 +86,21 @@ def main(data, out, epochs, batch_size, lr, eval_every, workers, max_iters, seed
 
         last = (ep + 1 == epochs) or (max_iters and it >= max_iters)
         if (ep + 1) % eval_every == 0 or last:
-            m = evaluate(model, val_ds, dev)
-            row = {'epoch': ep + 1, 'iter': it, **{k: round(v, 4) if isinstance(v, float) else v for k, v in m.items()},
-                   **{k: round(v / n, 4) for k, v in run.items()}}
+            row, ms = {'epoch': ep + 1, 'iter': it}, {}
+            for pre, vds in vals:
+                m = ms[pre] = evaluate(model, vds, dev)
+                row.update({pre + k: round(v, 4) if isinstance(v, float) else v for k, v in m.items()})
+                print(f'  val{pre[:-1] and " " + pre[:-1]} ' + ' '.join(
+                    f'{k} {row[pre + k]}' for k in ('ap50', 'f1', 'mean_iou', 'class_acc', 'width_kp_medabs_pct',
+                                                     'width_mask_medabs_pct')), flush=True)
+            row.update({k: round(v / n, 4) for k, v in run.items()})
             rows.append(row)
-            print('  val ' + ' '.join(f'{k} {row[k]}' for k in ('ap50', 'f1', 'mean_iou', 'class_acc',
-                                                                   'width_kp_medabs_pct', 'width_mask_medabs_pct')), flush=True)
-            ck = {'model': model.state_dict(), 'classes': train_ds.classes, 'epoch': ep + 1, 'val': m}
+            score = sum(m['ap50'] for m in ms.values()) / len(ms)
+            ck = {'model': model.state_dict(), 'classes': classes, 'epoch': ep + 1, 'val': ms[''],
+                  'val_extra': {pre: m for pre, m in ms.items() if pre}}
             torch.save(ck, os.path.join(out, 'last.pt'))
-            if m['ap50'] > best:
-                best = m['ap50']
+            if score > best:
+                best = score
                 torch.save(ck, os.path.join(out, 'best.pt'))
             with open(os.path.join(out, 'metrics.csv'), 'w', newline='') as f:
                 w = csv.DictWriter(f, fieldnames=list(rows[-1].keys()))
