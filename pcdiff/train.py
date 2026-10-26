@@ -190,10 +190,12 @@ def main(config, weights, checkpoint, test):
                       logger=tb_logger,
                       log_every_n_steps=100,
                       max_epochs= cfg['train']['max_epoch'],
-                      callbacks=[lr_monitor, checkpoint_saver],
+                      callbacks=[lr_monitor, checkpoint_saver] + ([ModelCheckpoint(
+                          filename=cfg['experiment']['id'] + '_best_{epoch:02d}', monitor='val/cd_mm', mode='min',
+                          save_top_k=3)] if cfg['train'].get('val_batches', 1) > 1 else []),
                       check_val_every_n_epoch=cfg['train'].get('val_every_n_epochs', 1),
                       num_sanity_val_steps= 1, #skips checking the val before training
-                      limit_val_batches=  1 #0.02 #1 
+                      limit_val_batches=cfg['train'].get('val_batches', 1) # 8 fruits per batch
                       , limit_train_batches=cfg['train'].get('limit_train_batches', 1.0) # int = batches per epoch (large datasets)
                       #gradient_clip_val=0.5,
                       )

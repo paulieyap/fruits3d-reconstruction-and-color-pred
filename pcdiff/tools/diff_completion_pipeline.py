@@ -99,6 +99,7 @@ class DiffCompletion:
         hparams['diff'].update(diff_overrides or {})  # e.g. x0_fix_tc / x0_prior_std (sampling only)
 
         self.model = DiffusionPoints.load_from_checkpoint(diff_path, hparams=hparams).cuda()
+        self.model.use_ema_weights()  # no-op for checkpoints trained without EMA
         self.model.eval()
         self.hparams = self.model.hparams
 

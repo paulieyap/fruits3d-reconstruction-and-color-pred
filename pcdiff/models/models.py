@@ -13,6 +13,7 @@ from pytorch_lightning import LightningModule, LightningDataModule
 from pcdiff.utils.collations import *
 from pcdiff.utils.metrics import ChamferDistance, PrecisionRecall
 from diffusers import DPMSolverMultistepScheduler
+from torch.optim.swa_utils import AveragedModel, get_ema_multi_avg_fn
 
 class DiffusionPoints(LightningModule):
     def __init__(self, hparams:dict, data_module: LightningDataModule = None):
@@ -72,8 +73,30 @@ class DiffusionPoints(LightningModule):
         self.partial_enc = minknet.MinkGlobalEnc(in_channels=6, out_channels=self.hparams['model']['out_dim']) #96
         self.model = minknet.MinkUNetDiff(in_channels=6,out_channels=6) #changed to 6
 
+        # optional exponential moving average of the weights (train.ema_decay, e.g. 0.999); validation and
+        # inference use the averaged weights, the optimiser keeps training the live ones
+        self.ema = None
+        if self.hparams['train'].get('ema_decay'):
+            self.ema = AveragedModel(self._nets(), multi_avg_fn=get_ema_multi_avg_fn(self.hparams['train']['ema_decay']),
+                                     use_buffers=True)
+            self.ema.requires_grad_(False)
+        self._live_weights = None
+
         self.chamfer_distance = ChamferDistance()
         self.precision_recall = PrecisionRecall(0.001,0.01,100)
+
+    def _nets(self):
+        # the trained networks as one module (same keys as the EMA copy)
+        return nn.ModuleDict({'model': self.model, 'enc': self.partial_enc})
+
+    def use_ema_weights(self):
+        """Inference: load the EMA weights into the networks for good (no-op without EMA)."""
+        if self.ema is not None:
+            self._nets().load_state_dict(self.ema.module.state_dict())
+
+    def on_train_batch_end(self, outputs, batch, batch_idx):
+        if self.ema is not None:
+            self.ema.update_parameters(self._nets())
 
     def scheduler_to_cuda(self):
         self.dpm_scheduler.timesteps = self.dpm_scheduler.timesteps.cuda()
@@ -289,13 +312,24 @@ class DiffusionPoints(LightningModule):
         # metrics accumulate over update() calls; score each validation run on its own
         self.chamfer_distance.reset()
         self.precision_recall.reset()
+        if self.ema is not None:  # validate the EMA weights, keep the live ones aside
+            self._live_weights = {k: v.detach().clone() for k, v in self._nets().state_dict().items()}
+            self._nets().load_state_dict(self.ema.module.state_dict())
+
+    def on_validation_epoch_end(self):
+        if self.chamfer_distance.dists:
+            # mean Chamfer (mm) over all validation fruits of this run; checkpoints are picked by it
+            self.log('val/cd_mm', 1000 * float(np.mean(self.chamfer_distance.dists)))
+        if self._live_weights is not None:
+            self._nets().load_state_dict(self._live_weights)
+            self._live_weights = None
 
     def on_test_epoch_start(self):
         self.chamfer_distance.reset()
         self.precision_recall.reset()
 
     def validation_step(self, batch:dict, batch_idx):
-        if batch_idx != 0:
+        if batch_idx >= self.hparams['train'].get('val_batches', 1):
             return
 
         self.model.eval()
@@ -511,7 +545,12 @@ class DiffusionPoints(LightningModule):
         return {'test/cd_mean': cd_mean, 'test/cd_std': cd_std, 'test/precision': pr, 'test/recall': re, 'test/fscore': f1}
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams['train']['lr'], betas=(0.9, 0.999))
+        params = [p for n, p in self.named_parameters() if not n.startswith('ema.')]
+        optimizer = torch.optim.Adam(params, lr=self.hparams['train']['lr'], betas=(0.9, 0.999))
+        if self.hparams['train'].get('lr_schedule') == 'cosine':  # per epoch, down to lr/100 at max_epoch
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, self.hparams['train']['max_epoch'], eta_min=self.hparams['train']['lr'] / 100)
+            return [optimizer], [scheduler]
         #scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.998)
         #scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
         #                                                        self.hparams['train']['max_epoch'],
