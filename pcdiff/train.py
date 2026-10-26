@@ -194,6 +194,7 @@ def main(config, weights, checkpoint, test):
                       check_val_every_n_epoch=cfg['train'].get('val_every_n_epochs', 1),
                       num_sanity_val_steps= 1, #skips checking the val before training
                       limit_val_batches=  1 #0.02 #1 
+                      , limit_train_batches=cfg['train'].get('limit_train_batches', 1.0) # int = batches per epoch (large datasets)
                       #gradient_clip_val=0.5,
                       )
 

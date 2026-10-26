@@ -279,7 +279,9 @@ class ShapeCompletionDataset():
 
         if self.cache_dir is not None and os.path.isfile(self.cache_path(fid)):
             # stored as float32; cast back so everything downstream sees the same dtype as without cache
-            c = {k: v.astype(np.float64) for k, v in np.load(self.cache_path(fid)).items()}
+            # only the sample arrays; caches may carry extra keys (e.g. harvester meta / real_partial)
+            z = np.load(self.cache_path(fid))
+            c = {k: z[k].astype(np.float64) for k in ('gt_points', 'gt_colors', 'rgbd_pcd', 'aligned_data')}
             gt_pcd = o3d.geometry.PointCloud()
             gt_pcd.points = o3d.utility.Vector3dVector(c['gt_points'])
             if len(c['gt_colors']):
