@@ -87,6 +87,9 @@ def main(diff, data, out, n_syn, n_real, real_split, steps, cond_w, bs):
     for kind, files in (('syn', syn), ('real', real)):
         for chunk in batches(files, bs):
             samples = [np.load(f) for f in chunk]
+            # the DPM-solver scheduler keeps per-batch history, so every batch must have the same size:
+            # pad the last one by repeating its first sample (zip below drops the padding again)
+            samples += [samples[0]] * (bs - len(samples))
             full, part, mean, std, offs = [], [], [], [], []
             for s in samples:
                 p = s['rgbd_pcd'].astype(np.float64)
