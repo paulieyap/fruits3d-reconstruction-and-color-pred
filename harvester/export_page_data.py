@@ -107,6 +107,11 @@ def main():
                      'inp': b64(np.clip(np.round((inp[ii, :3] - c) * 1e4), -32767, 32767).astype(np.int16)),
                      'inp_rgb': rgb8(inp[:, 3:], ii),
                      'pred': b64(np.clip(np.round((pred[pi, :3] - c) * 1e4), -32767, 32767).astype(np.int16))}
+                if 'traj' in z.files:  # denoising trajectory on 1500 of the shown pred points, so frames morph (and the page stays small)
+                    s['traj'] = [b64(np.clip(np.round((fr[:, :3].astype(np.float64) - c) * 1e4), -32767, 32767).astype(np.int16))
+                                 for fr in z["traj"][:, pi[:1500]]]
+                    s['traj_step'] = [int(v) + 1 for v in z['traj_step']]  # solver steps done: 0 = pure noise
+                    s['traj_t'] = [int(v) for v in z['traj_t']]
                 other = z['gt'] if kind == 'syn' else z['heldout']
                 s['other'] = q(other[:, :3].astype(np.float64), c, 3000, rng)
                 if kind == 'real':

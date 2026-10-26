@@ -8,6 +8,8 @@ real/*  : wrist-view input, stacker view held out. Held-out points further than 
           completion comes to them (median mm, % within 5 mm). A sphere fitted to the input is the
           baseline on the same points.
 Writes metrics.csv (one row per sample), summary.json and preds/<id>.npz (input, pred, gt/heldout).
+With --traj-every k the preds also hold the denoising trajectory: the initial noise and every k-th solver
+step (traj (F, N, 6) float16, traj_step, traj_t).
 """
 import glob, json, os, sys
 
@@ -74,7 +76,8 @@ def batches(items, n):
 @click.option('--bs', default=8)
 @click.option('--x0-fix-tc', type=int, default=None, help='epsilon models: re-centre/rescale the implied x0 above this t')
 @click.option('--x0-prior-std', default=None, help='comma-separated normalised XYZ std of a GT fruit, e.g. 0.83,0.79,0.86')
-def main(diff, data, out, n_syn, n_real, real_split, steps, cond_w, bs, x0_fix_tc, x0_prior_std):
+@click.option('--traj-every', default=0, help='also save the sample at every k-th denoising step (0 = off)')
+def main(diff, data, out, n_syn, n_real, real_split, steps, cond_w, bs, x0_fix_tc, x0_prior_std, traj_every):
     os.makedirs(os.path.join(out, 'preds'), exist_ok=True)
     ov = {}
     if x0_fix_tc is not None:
@@ -89,6 +92,10 @@ def main(diff, data, out, n_syn, n_real, real_split, steps, cond_w, bs, x0_fix_t
     syn = list(rng.permutation(syn)[:n_syn]) if n_syn else []
     real = sorted(glob.glob(os.path.join(data, 'real', real_split, '*.npz')))
     real = list(rng.permutation(real)[:n_real]) if n_real else real
+    save_steps = ((-1,) + tuple(range(traj_every - 1, steps, traj_every))) if traj_every else ()
+    ts = dc.model.dpm_scheduler.timesteps.cpu().numpy()
+    # noise level each saved sample sits at: the initial noise at ts[0], after step i at ts[i + 1] (0 after the last)
+    traj_t = np.array([int(ts[i + 1]) if i + 1 < len(ts) else 0 for i in save_steps])
     rows = []
     for kind, files in (('syn', syn), ('real', real)):
         for chunk in batches(files, bs):
@@ -109,8 +116,14 @@ def main(diff, data, out, n_syn, n_real, real_split, steps, cond_w, bs, x0_fix_t
                 full.append(sp[0]); mean.append(sp[1]); std.append(sp[2]); part.append(sp[3]); offs.append(off)
             batch = {'pcd_full': torch.stack(full).float(), 'pcd_part': torch.stack(part).float(),
                      'mean': torch.stack(mean).float(), 'std': torch.stack(std).float()}
-            preds = dc.complete(batch)
-            for f, s, pr, off in zip(chunk, samples, preds, offs):
+            if save_steps:
+                preds, traj = dc.complete(batch, save_steps)
+                traj = np.stack([traj[k] for k in save_steps], 1)  # (B, F, N, 6)
+            else:
+                preds, traj = dc.complete(batch), [None] * len(samples)
+            for f, s, pr, off, tr in zip(chunk, samples, preds, offs, traj):
+                extra = {} if tr is None else {'traj': (tr + np.r_[off, 0, 0, 0]).astype(np.float16),
+                                               'traj_step': np.array(save_steps), 'traj_t': traj_t}
                 fid = os.path.basename(f)[:-4]
                 inp = s['rgbd_pcd'][:, :3].astype(np.float64)
                 pred = clean_pred(pr[:, :3] + off)
@@ -124,7 +137,7 @@ def main(diff, data, out, n_syn, n_real, real_split, steps, cond_w, bs, x0_fix_t
                             row[f'{name}_{k}'] = v
                         row[f'{name}_vol_err_pct'] = 100 * (hull_vol(P) - hull_vol(gt)) / hull_vol(gt)
                     np.savez_compressed(os.path.join(out, 'preds', fid + '.npz'), inp=s['rgbd_pcd'], pred=pr + np.r_[off, 0, 0, 0],
-                                        gt=s['aligned_data'])
+                                        gt=s['aligned_data'], **extra)
                 else:
                     held = s['heldout'][:, :3].astype(np.float64)
                     d_in, _ = cKDTree(inp).query(held)
@@ -140,7 +153,7 @@ def main(diff, data, out, n_syn, n_real, real_split, steps, cond_w, bs, x0_fix_t
                     row['ddpm_vol_ml'] = hull_vol(pred)
                     row['sphere_vol_ml'] = 4 / 3 * np.pi * r ** 3 * 1e6
                     np.savez_compressed(os.path.join(out, 'preds', fid + '.npz'), inp=s['rgbd_pcd'], pred=pr + np.r_[off, 0, 0, 0],
-                                        heldout=s['heldout'], crop_jpg=s['crop_jpg'], meta=s['meta'])
+                                        heldout=s['heldout'], crop_jpg=s['crop_jpg'], meta=s['meta'], **extra)
                 rows.append(row)
             print(f'{kind} {len(rows)}', flush=True)
     keys = sorted({k for r in rows for k in r}, key=lambda k: (k not in ('kind', 'id'), k))
