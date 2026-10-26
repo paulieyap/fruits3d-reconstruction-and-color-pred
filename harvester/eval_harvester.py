@@ -90,7 +90,9 @@ def main(diff, data, out, n_syn, n_real, real_split, steps, cond_w, bs):
             full, part, mean, std, offs = [], [], [], [], []
             for s in samples:
                 p = s['rgbd_pcd'].astype(np.float64)
-                g = s['aligned_data'].astype(np.float64) if kind == 'syn' else np.c_[p[:, :3], -np.ones((len(p), 3))]
+                # no GT for real samples: the partial (with its colours) stands in, it only sets the point count
+                # and the RGB statistics (all -1 colours would make them NaN)
+                g = s['aligned_data'].astype(np.float64) if kind == 'syn' else p
                 off = p[:, :3].mean(0) if recentre else np.zeros(3)
                 p = p.copy(); g = g.copy()
                 p[:, :3] -= off; g[:, :3] -= off
