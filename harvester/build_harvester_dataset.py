@@ -174,21 +174,22 @@ def synth_sample(rng, K, T, img, inst, a):
     sig = rng.uniform(0.6, 1.6) * 1e-3 * (z / 0.5) ** 2
     zn = z + rng.normal(size=len(z)) * sig
     zn += rng.normal(0, 0.6e-3) * ((ys[ok] - ys.mean()) / 50.0) + rng.normal(0, 0.6e-3) * ((xs[ok] - xs.mean()) / 50.0)
-    fly = rng.random(len(z)) < rng.uniform(0.0, 0.03)
-    zn[fly] += rng.uniform(-0.01, 0.03, fly.sum())
+    fly = rng.random(len(z)) < rng.uniform(0.0, 0.015)
+    zn[fly] += rng.uniform(-0.008, 0.008, fly.sum())
     p = p * (zn / z)[:, None]
     rgb = img[ys[ok], xs[ok]].astype(np.float32) / 255.0
     part = np.c_[p, rgb]
     if len(part) > MAX_PART:
         part = part[rng.choice(len(part), MAX_PART, replace=False)]
     gt = np.asarray(mesh.sample_points_uniformly(N_GT).points)
-    # GT colours from the nearest partial point within 1 cm (thesis convention), else -1
+    # GT colours from the nearest partial point within 5 mm (thesis used 1 cm, which colours most of a
+    # 2 cm-radius tomato from a front view), else -1
     pc = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(part[:, :3]))
     tree = o3d.geometry.KDTreeFlann(pc)
     col = -np.ones((len(gt), 3))
     for i, q in enumerate(gt):
         _, idx, d2 = tree.search_knn_vector_3d(q, 1)
-        if d2[0] < 1e-4:
+        if d2[0] < 2.5e-5:
             col[i] = part[idx[0], 3:]
     return part.astype(np.float32), np.c_[gt, col].astype(np.float32), dict(radius=r, centre=c.tolist(), R=R.tolist())
 
