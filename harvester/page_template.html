@@ -85,6 +85,7 @@ canvas#pc { width: 100%; height: 480px; background: var(--panel); border: 1px so
 .controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: 13px; }
 .controls label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
 .sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+#f-model { font: 500 12px var(--mono); padding: 4px 6px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); color: var(--ink); }
 .seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
 .seg button { all: unset; cursor: pointer; padding: 5px 10px; font: 500 12px var(--mono); }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
@@ -95,7 +96,7 @@ canvas#pc { width: 100%; height: 480px; background: var(--panel); border: 1px so
 .traj input[type=range] { flex: 1 1 160px; accent-color: var(--accent); }
 .traj .play { all: unset; cursor: pointer; padding: 4px 10px; border: 1px solid var(--rule); border-radius: 4px; font: 500 12px var(--mono); }
 .traj .play:focus-visible { outline: 2px solid var(--accent); }
-.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 6px; }
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 6px; }
 .strip button { all: unset; cursor: pointer; display: grid; gap: 2px; border: 1px solid var(--rule); border-radius: 4px; padding: 3px; background: var(--panel); }
 .strip button[aria-pressed="true"] { border-color: var(--accent); }
 .strip button:focus-visible { outline: 2px solid var(--accent); }
@@ -176,6 +177,7 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
       <div class="list" id="list" role="listbox" aria-label="Samples"></div>
       <div class="stage">
         <div class="controls">
+          <select id="f-model" aria-label="Model and sampler shown" hidden></select>
           <span class="seg" role="group" aria-label="Sample set"><button id="f-real" aria-pressed="true">real</button><button id="f-syn" aria-pressed="false">synthetic</button></span>
           <label><input type="checkbox" id="t-inp" checked> <span class="sw" style="background:var(--input)"></span> input view (real colour)</label>
           <label><input type="checkbox" id="t-pred" checked> <span class="sw" style="background:var(--accent)"></span> completion</label>
@@ -187,7 +189,7 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
           <div class="row"><b>Denoising</b><button class="play" id="tr-play">play</button>
             <input type="range" id="tr-step" min="0" max="5" step="1" aria-label="Denoising step shown in the main view"><span id="tr-lab" class="tag"></span></div>
           <div class="strip" id="strip"></div>
-          <p style="font-size:13px;color:var(--muted);margin:0">The sampler starts from Gaussian noise and runs 50 DPM-Solver steps; shown is the sample after every 10th step (t is the noise level on the 1000-step training schedule). Panels are 120 mm across with the input faded, the main view 75 mm. The last panel is the completion above, on a 1500-point subset. With this linear noise schedule the noise level stays high for most steps, so the fruit only takes shape in the last ten.</p>
+          <p style="font-size:13px;color:var(--muted);margin:0">The sampler starts from Gaussian noise and runs 50 or 100 DPM-Solver steps (pick the model above); shown is the sample after every 10th step (t is the noise level on the 1000-step training schedule). Panels are 120 mm across with the input faded, the main view 75 mm. The last panel is the completion above, on a 1500-point subset. With this linear noise schedule the noise level stays high for most steps, so the fruit only takes shape near the end.</p>
         </div>
         <div class="meta"><div class="kv" id="kv"></div><img id="crop" alt="Wrist camera crop of the selected tomato" hidden></div>
       </div>
@@ -231,7 +233,7 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
   // header chips
   const st = D.status || {};
   const chips = [[st.state === 'done' ? 'training finished' : `training · epoch ${st.epoch ?? '?'} / ${st.max_epoch ?? '?'}`, st.state === 'done' ? 'state-done' : 'state-run'],
-    [`updated ${st.updated || ''}`, ''], [`branch harvester-pcdiff · ${st.commit || ''}`, ''], [`checkpoint shown: ${D.sample_ckpt || 'none yet'}`, '']];
+    [`updated ${st.updated || ''}`, ''], [`branch harvester-pcdiff · ${st.commit || ''}`, ''], [`3D view: ${[].concat(D.sample_ckpt || []).join(', ') || 'none yet'}`, '']];
   $('chips').innerHTML = chips.map(([t, c]) => `<span class="chip ${c}">${t}</span>`).join('');
 
   // dataset
@@ -335,10 +337,18 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
   const dec8 = (b) => { const s = atob(b), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; };
   const samples = (D.samples || []).map(s => ({ ...s, _inp: dec16(s.inp), _rgb: dec8(s.inp_rgb), _pred: dec16(s.pred), _oth: dec16(s.other), _traj: (s.traj || []).map(dec16) }));
   let frame = -1, playTimer = null; // -1 = final completion
+  const evs = [...new Set(samples.map(s => s.ev))];
+  const evLabel = ev => { const su = (D.evals[ev] || {}).summary || {}, m = ev.match(/^(v\d+)_epoch_(\d+)/); return `${m ? m[1] + ' epoch ' + +m[2] : ev} · ${su.T ?? '?'} steps · w ${su.s ?? '?'}`; };
+  let model = evs[0];
+  if (evs.length > 1) {
+    $('f-model').innerHTML = evs.map(e => `<option value="${e}">${evLabel(e)}</option>`).join('');
+    $('f-model').hidden = false;
+    $('f-model').onchange = e => { model = e.target.value; renderList(cur?.id); };
+  }
   let kind = samples.some(s => s.kind === 'real') ? 'real' : 'syn', cur = null, yaw = 0.6, pitch = -0.35, spin = true, drag = null;
   const cv = $('pc'), ctx = cv.getContext('2d');
-  function renderList() {
-    const items = samples.filter(s => s.kind === kind);
+  function renderList(keepId) {
+    const items = samples.filter(s => s.kind === kind && s.ev === model);
     $('f-real').setAttribute('aria-pressed', kind === 'real'); $('f-syn').setAttribute('aria-pressed', kind === 'syn');
     $('oth-name').textContent = kind === 'real' ? 'stacker view (held out)' : 'complete ground truth';
     if (!items.length) { $('list').innerHTML = '<div class="empty">No evaluated samples yet. They appear after the first checkpoint evaluation.</div>'; cur = null; draw(); return; }
@@ -348,10 +358,10 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
       return `<button role="option" data-id="${s.id}" aria-pressed="false">${th}<span><span class="tag">${s.id.slice(0, 15)}</span><br>${line2}</span></button>`;
     }).join('');
     $('list').querySelectorAll('button').forEach(b => b.onclick = () => select(b.dataset.id));
-    select(items[0].id);
+    select(items.some(s => s.id === keepId) ? keepId : items[0].id);
   }
   function select(id) {
-    cur = samples.find(s => s.id === id);
+    cur = samples.find(s => s.id === id && s.ev === model);
     $('list').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === id));
     const m = cur.metrics, kv = [['sample', cur.id], ['input points', m.n_in], ['sphere radius', fmt(m.r_sphere_mm) + ' mm']];
     if (cur.kind === 'real') kv.push(['unseen points', m.n_unseen], ['pcdiff unseen median', fmt(m.ddpm_unseen_med_mm, 2) + ' mm'], ['sphere unseen median', fmt(m.sphere_unseen_med_mm, 2) + ' mm'], ['pcdiff unseen ≤5 mm', fmt(m.ddpm_unseen_in5mm_pct) + ' %'], ['pcdiff hull volume', fmt(m.ddpm_vol_ml) + ' ml'], ['sphere volume', fmt(m.sphere_vol_ml) + ' ml']);
@@ -409,7 +419,7 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
     const n = cur._traj.length;
     frame = k === n - 1 ? -1 : k; // the last frame is the completion itself, shown with all points
     $('tr-step').value = k;
-    $('tr-lab').textContent = (cur.traj_step[k] ? `step ${cur.traj_step[k]} / 50` : 'initial noise') + ` · t=${cur.traj_t[k]}`;
+    $('tr-lab').textContent = (cur.traj_step[k] ? `step ${cur.traj_step[k]} / ${cur.traj_step[cur.traj_step.length - 1]}` : 'initial noise') + ` · t=${cur.traj_t[k]}`;
     $('strip').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.k === k));
     if (!quiet) draw();
   }

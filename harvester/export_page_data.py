@@ -70,7 +70,7 @@ def main():
     ap.add_argument('--ds', required=True)
     ap.add_argument('--views', required=True)
     ap.add_argument('--out', required=True)
-    ap.add_argument('--ckpt-eval', default=None, help='eval/<name> folder for the 3D samples (default: last)')
+    ap.add_argument('--ckpt-eval', nargs='*', default=[], help='eval/<name> folders for the 3D samples, one viewer model each (default: last)')
     ap.add_argument('--n-syn', type=int, default=12)
     ap.add_argument('--n-real', type=int, default=16)
     ap.add_argument('--overlays', nargs='*', default=[])
@@ -93,9 +93,10 @@ def main():
     if a.scan:
         data['scan'] = {os.path.basename(os.path.dirname(f)): {k: json.load(open(f))[k] for k in ('syn', 'real')}
                         for f in glob.glob(os.path.join(a.scan, '*', 'summary.json'))}
-    ev = a.ckpt_eval or (sorted(data['evals'])[-1] if data['evals'] else None)
-    data['sample_ckpt'] = ev
-    if ev:
+    evs = a.ckpt_eval or ([sorted(data['evals'])[-1]] if data['evals'] else [])
+    data['sample_ckpt'] = evs
+    for ev in evs:
+        rng = np.random.default_rng(0)  # same fruits and point subsets for every model, so they compare 1:1
         rows = {r['id']: r for r in data['evals'][ev]['rows']}
         preds = sorted(glob.glob(os.path.join(eval_dirs[ev], 'preds', '*.npz')))
         syn = [p for p in preds if rows.get(os.path.basename(p)[:-4], {}).get('kind') == 'syn']
@@ -110,7 +111,7 @@ def main():
                 ii = rng.choice(len(inp), min(2500, len(inp)), replace=False)
                 pred = z['pred'].astype(np.float64)
                 pi = rng.choice(len(pred), min(4000, len(pred)), replace=False)
-                s = {'kind': kind, 'id': fid, 'metrics': {k: v for k, v in rows[fid].items() if v not in ('', None)},
+                s = {'ev': ev, 'kind': kind, 'id': fid, 'metrics': {k: v for k, v in rows[fid].items() if v not in ('', None)},
                      'inp': b64(np.clip(np.round((inp[ii, :3] - c) * 1e4), -32767, 32767).astype(np.int16)),
                      'inp_rgb': rgb8(inp[:, 3:], ii),
                      'pred': b64(np.clip(np.round((pred[pi, :3] - c) * 1e4), -32767, 32767).astype(np.int16))}
