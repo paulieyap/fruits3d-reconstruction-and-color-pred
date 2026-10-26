@@ -17,7 +17,7 @@ tmux new -s paulie-harvester 'bash code/fruits3d/harvester/run_all.sh 2>&1 | tee
 mkdir -p runs/harvester_v2; tmux new -s paulie-harvester-v2 'bash code/fruits3d/harvester/run_v2.sh 2>&1 | tee -a runs/harvester_v2/run_v2.log'   # v2 (v-prediction) + evals
 
 # TensorBoard
-docker run --rm -p 6006:6006 -v $PWD/runs/harvester_v1:/r pcdiff:cu128 tensorboard --logdir /r --bind_all
+docker run --rm -p 6006:6006 -v $PWD/runs:/r pcdiff:cu128 tensorboard --logdir_spec v1:/r/harvester_v1,v2:/r/harvester_v2 --bind_all
 
 # single steps
 envs/prep/bin/python code/fruits3d/harvester/extract_snapshots.py "data/snapshots_raw/<day>/*" data/views
