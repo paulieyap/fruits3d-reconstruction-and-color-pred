@@ -168,6 +168,14 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
   </section>
 
   <section>
+    <span class="eyebrow">What went wrong in v1, and the fix</span>
+    <h2>Why there are two runs</h2>
+    <p>The first run (v1) predicts the noise ε, as the thesis code does. Its loss looked normal, but every sampled fruit landed as a small blob about 9 cm to the side. The cause: with this linear schedule ᾱ at the noisiest step is about 4·10⁻⁵, so the clean shape implied there is (x − σ·ε̂)/0.0064. A bias of 0.027 in ε̂ becomes an offset of −4σ, and later steps cannot pull it back. Re-centring the implied shape at the noisy steps brings v1 from a 72 mm to a 6.6 mm Chamfer on a quick test. That is a workaround. It still shrinks fruits, and forcing the size would erase size information.</p>
+    <p>v2 trains the same network to predict v = √ᾱ·ε − √(1−ᾱ)·x₀ instead. The implied shape stays bounded at every step, so no correction is needed. v1 was stopped after 30 epochs so v2 gets the GPU; its numbers below use the centroid fix above t = 300.</p>
+    <p>The diffusion solver also carried its history from one sampling call to the next, so every batch after the first started from the previous batch's last outputs. That is fixed in <code>p_sample_loop</code>. It also affects earlier evaluations made with <code>diff_completion_pipeline.py</code> on several batches.</p>
+  </section>
+
+  <section>
     <span class="eyebrow">Read before using the numbers</span>
     <h2>Limits of v1</h2>
     <ul class="plain">
@@ -242,29 +250,34 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
     const leg = series.map(sr => `<span style="display:inline-flex;gap:6px;align-items:center"><span class="sw" style="background:${sr.color}"></span>${sr.name}</span>`).join(' ');
     return `<div class="figure"><h3>${title}</h3>${s}</svg><span class="cap" style="display:flex;gap:14px;flex-wrap:wrap">${leg}${opts.cap ? ' · ' + opts.cap : ''}</span></div>`;
   }
-  const C = D.curves || {};
+  const RUNS = D.curves || {};
+  const runCol = { v1: css('--input'), v2: css('--accent') };
   const ema = (pts, a = 0.9) => { let m = null; return pts.map(p => [p[0], m = m === null ? p[1] : a * m + (1 - a) * p[1]]); };
-  const byStep = (tag) => (C[tag] || []).map(r => [r[0], r[2]]);
-  const byEpoch = (tag) => (C[tag] || []).filter(r => r[1] !== null).map(r => [r[1], r[2]]);
-  const lx = byStep('train/loss_xyz'), lr = byStep('train/loss_rgb');
-  $('curves').innerHTML = [
-    line('Denoising loss (MSE on noise)', [{ name: 'xyz', color: css('--accent'), pts: ema(lx), raw: lx }, { name: 'rgb (seen points)', color: css('--gt'), pts: ema(lr), raw: lr }], { xlabel: 'step', clipq: 0.98, cap: 'smoothed, raw faint' }),
-    line('Validation Chamfer (one fruit, cumulative)', [{ name: 'cd_mean', color: css('--accent'), pts: byEpoch('val/cd_mean') }], { xlabel: 'epoch' }),
-    line('Validation F-score (one fruit, cumulative)', [{ name: 'fscore', color: css('--accent'), pts: byEpoch('val/fscore') }, { name: 'precision', color: css('--gt'), pts: byEpoch('val/precision') }, { name: 'recall', color: css('--input'), pts: byEpoch('val/recall') }], { xlabel: 'epoch' }),
-  ].join('');
+  const byStep = (C, tag) => (C[tag] || []).map(r => [r[0], r[2]]);
+  const byEpoch = (C, tag) => (C[tag] || []).filter(r => r[1] !== null).map(r => [r[1] + 1, r[2]]);
+  const lossName = { v1: 'v1 · ε-prediction loss', v2: 'v2 · v-prediction loss' };
+  const figs = Object.entries(RUNS).map(([run, C]) => {
+    const lx = byStep(C, 'train/loss_xyz'), lr = byStep(C, 'train/loss_rgb');
+    return line(lossName[run] || run, [{ name: 'xyz', color: css('--accent'), pts: ema(lx), raw: lx }, { name: 'rgb (seen points)', color: css('--gt'), pts: ema(lr), raw: lr }], { xlabel: 'step', clipq: 0.98, cap: 'smoothed, raw faint' });
+  });
+  const vs = (tag) => Object.entries(RUNS).map(([run, C]) => ({ name: run, color: runCol[run] || css('--muted'), pts: byEpoch(C, tag) })).filter(x => x.pts.length);
+  figs.push(line('Validation Chamfer, one fruit (m)', vs('val/cd_mean_epoch'), { xlabel: 'epoch' }));
+  figs.push(line('Validation F-score, one fruit', vs('val/fscore_epoch'), { xlabel: 'epoch' }));
+  $('curves').innerHTML = figs.join('');
 
   // eval table
   const E = D.evals || {};
   const names = Object.keys(E).sort((a, b) => (a === 'last') - (b === 'last') || a.localeCompare(b, undefined, { numeric: true }));
-  if (!names.length) { $('eval-tbl').innerHTML = '<div class="empty">Evaluation runs after training. Checkpoints at epochs 20, 40, 60 and the last one are scored on 300 synthetic val fruits and every real val pair.</div>'; }
+  if (!names.length) { $('eval-tbl').innerHTML = '<div class="empty">Evaluation runs after training: v2 at epochs 10–60 and v1 at 10, 20 and 30 (with the centroid fix), each on 300 synthetic val fruits and every real val pair.</div>'; }
   else {
     const cols = [['syn', 'cd_mm', 'Chamfer mm', 2, 'low'], ['syn', 'f2.5', 'F@2.5 mm', 1, 'high'], ['syn', 'f5', 'F@5 mm', 1, 'high'], ['syn', 'vol_err_pct', 'volume err %', 1, 'abs'],
       ['real', 'unseen_med_mm', 'real: unseen median mm', 2, 'low'], ['real', 'unseen_in5mm_pct', 'real: unseen ≤5 mm %', 1, 'high']];
     let h = '<table><thead><tr><th>checkpoint</th><th>method</th>' + cols.map(c => `<th>${c[2]}</th>`).join('') + '</tr></thead><tbody>';
     names.forEach(n => {
       const S = E[n].summary;
+      if (!S.real && !S.syn) return;
       ['ddpm', 'sphere'].forEach(m => {
-        h += `<tr><td>${m === 'ddpm' ? n.replace('harvester_v1_', '') : ''}</td><td>${m === 'ddpm' ? 'pcdiff' : 'sphere fit'}</td>`;
+        h += `<tr><td>${m === 'ddpm' ? n.replace('harvester_v1_', 'v1_').replace(/_/g, ' ').replace('x0fix300', '+ centroid fix') : ''}</td><td>${m === 'ddpm' ? 'pcdiff' : 'sphere fit'}</td>`;
         cols.forEach(([k, key, , d, better]) => {
           const v = S[k]?.[`${m}_${key}`], o = S[k]?.[`${m === 'ddpm' ? 'sphere' : 'ddpm'}_${key}`];
           let win = false; if (v !== undefined && o !== undefined) win = better === 'low' ? v < o : better === 'high' ? v > o : Math.abs(v) < Math.abs(o);

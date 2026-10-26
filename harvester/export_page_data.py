@@ -1,6 +1,6 @@
 """Collect everything the results page shows into one JSON (run on the GPU box, prep env).
 
-  python export_page_data.py --run runs/harvester_v1 --ds data/harvester_ds_v1 --views data/views --out page_data.json
+  python export_page_data.py --run v1=runs/harvester_v1 --run v2=runs/harvester_v2 --ds data/harvester_ds_v1 --views data/views --out page_data.json
 
 - curves: TensorBoard scalars (train loss per ~100 steps, val CD / F per epoch), read with tensorboard's
   event reader if available, else from <run>/scalars.csv (tools/export_scalars.py output)
@@ -66,7 +66,7 @@ def overlay(view_dir):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--run', required=True)
+    ap.add_argument('--run', action='append', required=True, help='name=run_dir (repeatable); evals are read from every run_dir/eval')
     ap.add_argument('--ds', required=True)
     ap.add_argument('--views', required=True)
     ap.add_argument('--out', required=True)
@@ -76,19 +76,21 @@ def main():
     ap.add_argument('--overlays', nargs='*', default=[])
     a = ap.parse_args()
     rng = np.random.default_rng(0)
-    data = {'curves': read_scalars(a.run), 'evals': {}, 'samples': [], 'dataset': {}}
-
-    for d in sorted(glob.glob(os.path.join(a.run, 'eval', '*'))):
+    runs = dict(r.split('=', 1) for r in a.run)
+    data = {'curves': {n: read_scalars(d) for n, d in runs.items()}, 'evals': {}, 'samples': [], 'dataset': {}}
+    eval_dirs = {}
+    for d in sorted(p for rd in runs.values() for p in glob.glob(os.path.join(rd, 'eval', '*'))):
         if os.path.isfile(os.path.join(d, 'summary.json')):
+            eval_dirs[os.path.basename(d)] = d
             data['evals'][os.path.basename(d)] = {
                 'summary': json.load(open(os.path.join(d, 'summary.json'))),
                 'rows': list(csv.DictReader(open(os.path.join(d, 'metrics.csv'))))}
 
-    ev = a.ckpt_eval or ('last' if 'last' in data['evals'] else (sorted(data['evals'])[-1] if data['evals'] else None))
+    ev = a.ckpt_eval or (sorted(data['evals'])[-1] if data['evals'] else None)
     data['sample_ckpt'] = ev
     if ev:
         rows = {r['id']: r for r in data['evals'][ev]['rows']}
-        preds = sorted(glob.glob(os.path.join(a.run, 'eval', ev, 'preds', '*.npz')))
+        preds = sorted(glob.glob(os.path.join(eval_dirs[ev], 'preds', '*.npz')))
         syn = [p for p in preds if rows.get(os.path.basename(p)[:-4], {}).get('kind') == 'syn']
         real = [p for p in preds if rows.get(os.path.basename(p)[:-4], {}).get('kind') == 'real']
         for kind, files, n in (('syn', syn, a.n_syn), ('real', real, a.n_real)):
