@@ -132,8 +132,10 @@ class DiffusionPoints(LightningModule):
         pcd = o3d.geometry.PointCloud()
         # the multistep solver keeps the previous model outputs (model_outputs, lower_order_nums) until
         # set_timesteps is called again; without this every call after the first starts from the last
-        # batch's history (and crashes when the batch size changes)
-        self.dpm_scheduler.set_timesteps(self.s_steps)
+        # batch's history (and crashes when the batch size changes). Reset just those two fields, as
+        # set_timesteps does (set_timesteps itself fails once the scheduler tensors are on the GPU).
+        self.dpm_scheduler.model_outputs = [None] * self.dpm_scheduler.config.solver_order
+        self.dpm_scheduler.lower_order_nums = 0
         self.scheduler_to_cuda()
 
         for i in tqdm(range(len(self.dpm_scheduler.timesteps))):
