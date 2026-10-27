@@ -166,7 +166,7 @@ details > summary { cursor: pointer; font: 600 16px var(--display); }
   <section>
     <span class="eyebrow">Which checkpoint</span>
     <h2>Error and size over training</h2>
-    <p>Each dot is one saved checkpoint, scored on hundreds of fruits. <b>Red</b> is v3 on test fruits it never saw, <b>teal</b> is v3 on fruits it trained on. If the model were overfitting (memorising its training fruits), teal would keep improving while red got worse. Instead the two lines sit on top of each other: both are best around epochs 7–11 and both get worse later. The middle chart shows why: early checkpoints make fruits too big, later ones too small, and epoch 11 crosses the right size. The brown lines are v2, which drifted the same way but further.</p>
+    <p>Each dot is one saved checkpoint, scored on hundreds of fruits. <b>Red</b> is v3 on test fruits it never saw, <b>teal</b> is v3 on fruits it trained on. If the model were overfitting (memorising its training fruits), teal would keep improving while red got worse. Instead the two lines sit on top of each other: both are best around epochs 7–11 and both get worse later. The middle chart shows why: early checkpoints make fruits too big, later ones too small, and epoch 11 crosses the right size. The brown lines are v2, which drifted the same way but further. On real fruits the training set scores a little better (by 0.2–0.4 mm), a small gap compared with the drift over epochs.</p>
     <div class="charts" id="epoch-charts"></div>
   </section>
 
