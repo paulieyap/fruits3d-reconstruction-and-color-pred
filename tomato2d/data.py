@@ -15,11 +15,12 @@ class TomatoSeg(Dataset):
     masks (N, H, W) uint8, keypoints (N, 2, 3) = two width endpoints (x, y, visibility), visibility 0
     where the width is not trusted (occluded or cut off), so those fruits add no keypoint loss.
     A label outside `classes` (e.g. 'tomato' from tomato2d/prepare_views.py) means ripeness unknown and maps to
-    len(classes) + 1."""
+    len(classes) + 1. `classes` overrides the set's own list (e.g. to train TomatoMAP photos under the ripeness
+    grades of another set: their labels are then all unknown)."""
 
-    def __init__(self, root, split, train=False):
+    def __init__(self, root, split, train=False, classes=None):
         ann = json.load(open(os.path.join(root, 'annotations.json')))
-        self.root, self.train, self.classes = root, train, ann['classes']
+        self.root, self.train, self.classes = root, train, classes or ann['classes']
         self.images = [im for im in ann['images'] if im['split'] == split]
 
     def __len__(self):

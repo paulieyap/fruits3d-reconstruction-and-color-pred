@@ -4,7 +4,8 @@
                             [--extra DIR ...] [--init CKPT]
 
 --extra adds the train split of another prepared set (e.g. tomato2d/prepare_views.py pseudo-labels) and scores its
-val split too; --init starts from a checkpoint (fine-tuning) instead of COCO weights.
+val split too; --init starts from a checkpoint (fine-tuning) instead of COCO weights. All sets are trained under the
+first set's classes: a label of another set that is not among them counts as ripeness unknown.
 
 Writes OUT_DIR/last.pt, OUT_DIR/best.pt (best val AP@0.5, averaged over the val sets) and OUT_DIR/metrics.csv
 (one row per evaluation; columns of an extra val set are prefixed x1_, x2_, ...).
@@ -40,15 +41,20 @@ def main(data, out, epochs, batch_size, lr, eval_every, workers, max_iters, seed
     torch.manual_seed(seed)
     os.makedirs(out, exist_ok=True)
     dev = 'cuda'
-    train_sets = [TomatoSeg(d, 'train', train=True) for d in (data, *extra)]
-    vals = [('', TomatoSeg(data, 'val'))] + [(f'x{i + 1}_', TomatoSeg(d, 'val')) for i, d in enumerate(extra)]
-    classes = train_sets[0].classes
+    classes = TomatoSeg(data, 'train').classes  # the first set's classes; other sets' labels map onto them by name
+    train_sets = [TomatoSeg(d, 'train', train=True, classes=classes) for d in (data, *extra)]
+    vals = [('', TomatoSeg(data, 'val'))] + [(f'x{i + 1}_', TomatoSeg(d, 'val', classes=classes))
+                                             for i, d in enumerate(extra)]
     train_ds = ConcatDataset(train_sets)
     loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=workers, collate_fn=collate,
                         persistent_workers=workers > 0, drop_last=True)
     model = build_model(num_classes=len(classes), pretrained=init is None).to(dev)
-    if init:
-        model.load_state_dict(torch.load(init, map_location=dev, weights_only=False)['model'])
+    if init:  # class-specific layers are skipped when the class count differs
+        own = model.state_dict()
+        sd = {k: v for k, v in torch.load(init, map_location=dev, weights_only=False)['model'].items()
+              if own[k].shape == v.shape}
+        model.load_state_dict(sd, strict=False)
+        print(f'init from {init}: {len(sd)}/{len(own)} tensors, new: {sorted(set(own) - set(sd))}', flush=True)
     params = [p for p in model.parameters() if p.requires_grad]
     opt = torch.optim.SGD(params, lr=lr, momentum=0.9, weight_decay=1e-4)
     total = epochs * len(loader)

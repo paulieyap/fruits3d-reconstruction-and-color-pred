@@ -17,7 +17,8 @@ from tomato2d.data import TomatoSeg
 from tomato2d.metrics import evaluate, mask_iou, widest_chord
 from tomato2d.model import load
 
-COLORS = [(46, 160, 67), (163, 190, 50), (240, 180, 40), (240, 110, 40), (210, 40, 40)]  # by ripeness class index
+COLORS = [(46, 160, 67), (163, 190, 50), (240, 180, 40), (240, 110, 40), (210, 40, 40),
+          (150, 150, 150)]  # by ripeness class index, green to red; grey = ripeness unknown
 
 
 def outline(mask):
@@ -71,9 +72,10 @@ def confusion_and_renders(model, ds, device, out, split, n_renders, score_thr=0.
                 if p in used_p or g in used_g:
                     continue
                 used_p.add(p); used_g.add(g)
-                conf[gl[g] - 1, pl[p] - 1] += 1
+                if gl[g] <= K:  # fruits of unknown ripeness have no row
+                    conf[gl[g] - 1, pl[p] - 1] += 1
         for g in range(len(gt)):
-            if g not in used_g:
+            if g not in used_g and gl[g] <= K:
                 missed[gl[g] - 1] += 1
         per_image.append({'file': t['file'], 'n_gt': len(gt), 'n_pred': int(keep.sum()), 'tp': len(used_g)})
 
@@ -113,13 +115,13 @@ def main(data, ckpt, out, split, renders):
 
     sessions = {}
     for im in ds.images:
-        sessions.setdefault(im['session'], []).append(im)
+        sessions.setdefault(im.get('session', im.get('source', 'all').split('_')[0]), []).append(im)
     per_session = {}
     for s, ims in sessions.items():
         sub = TomatoSeg(data, split)
         sub.images = ims
         r = evaluate(model, sub, dev)
-        per_session[str(s)] = {'images': len(ims), 'date': ims[0]['capture'][:10], **{
+        per_session[str(s)] = {'images': len(ims), 'date': ims[0].get('capture', '')[:10], **{
             k: r[k] for k in ('ap50', 'f1', 'mean_iou', 'class_acc', 'width_kp_medabs_pct', 'width_mask_medabs_pct', 'n_gt')}}
 
     res = {'split': split, 'checkpoint': ckpt, 'epoch': ck['epoch'], 'classes': ds.classes, 'images': len(ds),
