@@ -103,7 +103,7 @@ def main(ckpt, view_list, out, score_thr, ref_thr, near_px, renders):
     os.makedirs(os.path.join(out, 'renders'), exist_ok=True)
     model, ck = load(ckpt, dev)
     model.eval()
-    classes = ['nascent', 'mini', 'unripe green tomato', 'semi ripe', 'fully ripe']
+    classes = ck['classes']
     views = [l.strip() for l in open(view_list) if l.strip()]
     pick = set(np.linspace(0, len(views) - 1, min(renders, len(views))).round().astype(int).tolist())
     rows, fruits = [], []
