@@ -71,13 +71,14 @@ def batches(items, n):
 @click.option('--n-syn', default=200)
 @click.option('--n-real', default=0, help='0 = all real val pairs')
 @click.option('--real-split', default='val')
+@click.option('--syn-split', default='val', help='train = check for overfitting against the val numbers')
 @click.option('-T', 'steps', default=50)
 @click.option('-s', 'cond_w', default=1.0)
 @click.option('--bs', default=8)
 @click.option('--x0-fix-tc', type=int, default=None, help='epsilon models: re-centre/rescale the implied x0 above this t')
 @click.option('--x0-prior-std', default=None, help='comma-separated normalised XYZ std of a GT fruit, e.g. 0.83,0.79,0.86')
 @click.option('--traj-every', default=0, help='also save the sample at every k-th denoising step (0 = off)')
-def main(diff, data, out, n_syn, n_real, real_split, steps, cond_w, bs, x0_fix_tc, x0_prior_std, traj_every):
+def main(diff, data, out, n_syn, n_real, real_split, syn_split, steps, cond_w, bs, x0_fix_tc, x0_prior_std, traj_every):
     os.makedirs(os.path.join(out, 'preds'), exist_ok=True)
     ov = {}
     if x0_fix_tc is not None:
@@ -88,7 +89,7 @@ def main(diff, data, out, n_syn, n_real, real_split, steps, cond_w, bs, x0_fix_t
     norm = (dcfg.get('norm_mean'), dcfg.get('norm_std'))
     recentre = dcfg.get('recentre') == 'partial'
     rng = np.random.default_rng(0)
-    syn = sorted(glob.glob(os.path.join(data, 'syn', 'val', '*.npz')))
+    syn = sorted(glob.glob(os.path.join(data, 'syn', syn_split, '*.npz')))
     syn = list(rng.permutation(syn)[:n_syn]) if n_syn else []
     real = sorted(glob.glob(os.path.join(data, 'real', real_split, '*.npz')))
     real = list(rng.permutation(real)[:n_real]) if n_real else real
