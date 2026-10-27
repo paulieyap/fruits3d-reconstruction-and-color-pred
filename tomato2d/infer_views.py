@@ -21,7 +21,7 @@ import cv2
 import numpy as np
 import torch
 import torchvision.transforms.functional as TF
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from tomato2d.metrics import mask_iou, widest_chord
 from tomato2d.model import load
@@ -136,16 +136,17 @@ def main(ckpt, view_list, out, score_thr, ref_thr, near_px, renders):
                     f = {'view': view, 'score': float(s[i]), 'label': classes[int(l[i]) - 1], 'area_px': int(mn[i].sum())}
                     if w:
                         f.update(width_mm=w[0], width_px=w[1], z_m=w[2])
-                        lines.append(w[3]); labs.append((w[3], f'{w[0]:.0f}'))
+                        lines.append(w[3]); labs.append((w[3], f'{w[0]:.0f} mm'))
                     fruits.append(f)
                 if vi in pick:
                     left = paint(rgb, ref or [], [5] * len(ref or []), [])
                     right = paint(rgb, list(mn), [int(x) for x in l.cpu()], lines)
                     d = ImageDraw.Draw(right)
+                    font = ImageFont.load_default(size=max(14, rgb.shape[1] // 48))  # ~16 px after the resize below
                     for (p0, p1), t in labs:
-                        x, y = (p0[0] + p1[0]) / 2, p0[1] - 22
-                        d.rectangle([x - 22, y - 2, x + 22, y + 18], fill=(255, 255, 255))
-                        d.text((x - 18, y), t + 'mm', fill=(0, 0, 0))
+                        x0, y0, x1, y1 = d.textbbox(((p0[0] + p1[0]) / 2, p0[1] - 4), t, font=font, anchor='mb')
+                        d.rectangle([x0 - 3, y0 - 2, x1 + 3, y1 + 2], fill=(255, 255, 255))
+                        d.text(((p0[0] + p1[0]) / 2, p0[1] - 4), t, font=font, fill=(0, 0, 0), anchor='mb')
                     both = Image.new('RGB', (2 * rgb.shape[1] + 12, rgb.shape[0]), (255, 255, 255))
                     both.paste(left, (0, 0)); both.paste(right, (rgb.shape[1] + 12, 0))
                     both = both.resize((1600, round(both.size[1] * 1600 / both.size[0])), Image.LANCZOS)
