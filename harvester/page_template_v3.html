@@ -136,7 +136,18 @@ details > summary { cursor: pointer; font: 600 16px var(--display); }
   <section class="answer">
     <span class="eyebrow">Short answer</span>
     <h2>What we found</h2>
-    <!--FILL:answer-->
+    <div class="big">
+      <div class="card"><span class="k">Use</span><span class="v">v3 epoch 11</span><span class="k">with 50 steps</span></div>
+      <div class="card"><span class="k">Shape error, synthetic</span><span class="v">2.53 mm</span><span class="k">v2's best 2.80 · sphere fit 3.46</span></div>
+      <div class="card"><span class="k">Size error, synthetic</span><span class="v">+4 %</span><span class="k">v2's best +12 % · sphere fit −29 %</span></div>
+      <div class="card"><span class="k">Hidden side, real fruits</span><span class="v">2.03 mm</span><span class="k">87 % within 5 mm · sphere fit 4.58 mm</span></div>
+    </div>
+    <ul class="plain">
+      <li><b>v3 is better than v2</b> on synthetic fruits and gets the size about right. Both beat a fitted sphere by a wide margin on real fruits.</li>
+      <li><b>It is not overfitting.</b> On fruits the model trained on and fruits it never saw, the scores are nearly identical at every epoch (epoch 39: 3.15 vs 3.18 mm). Longer training makes both worse together, because the model learns to make fruits slightly too small. So more data would not fix it; the next fix should target size.</li>
+      <li><b>Epoch 7 is not the one to use.</b> It was picked automatically for the lowest shape error, but its fruits are about 40 % too big. The shape error barely notices that, which is why we now look at size too.</li>
+      <li><b>100 steps does not help.</b> Extra steps make every fruit about 20 % smaller, so results get worse for every checkpoint except epoch 7, where the shrinking happens to cancel its oversize.</li>
+    </ul>
   </section>
 
   <section>
@@ -155,14 +166,14 @@ details > summary { cursor: pointer; font: 600 16px var(--display); }
   <section>
     <span class="eyebrow">Which checkpoint</span>
     <h2>Error and size over training</h2>
-    <!--FILL:overfit-->
+    <p>Each dot is one saved checkpoint, scored on hundreds of fruits. <b>Red</b> is v3 on test fruits it never saw, <b>teal</b> is v3 on fruits it trained on. If the model were overfitting (memorising its training fruits), teal would keep improving while red got worse. Instead the two lines sit on top of each other: both are best around epochs 7–11 and both get worse later. The middle chart shows why: early checkpoints make fruits too big, later ones too small, and epoch 11 crosses the right size. The brown lines are v2, which drifted the same way but further.</p>
     <div class="charts" id="epoch-charts"></div>
   </section>
 
   <section>
     <span class="eyebrow">50 vs 100 steps</span>
     <h2>Does more cleaning-up help?</h2>
-    <!--FILL:steps-->
+    <p>The model turns random points into a fruit in a fixed number of steps. For image models, more steps usually means a cleaner result. Here it doesn't: with 100 steps every checkpoint makes smaller fruits (size error about 20 points lower), and the shape and real-fruit errors go up. Epoch 7 is the only exception on synthetic fruits, because it starts out 40 % too big, but it is still worse on real fruits. 50 steps is also twice as fast.</p>
     <div class="tbl" id="steps-tbl"></div>
   </section>
 
@@ -170,6 +181,7 @@ details > summary { cursor: pointer; font: 600 16px var(--display); }
     <span class="eyebrow">Look at the results</span>
     <h2>3D viewer</h2>
     <p>Pick a model and a fruit on the left. Drag to rotate. <span style="color:var(--input)">Real-colour points</span> are what the wrist camera saw (the input). <span style="color:var(--accent)">Red points</span> are the model's completed fruit. <span style="color:var(--gt)">Teal points</span> are what we check against: on real fruits the stacker camera's view, on synthetic fruits the true full shape. Good results: red covers the teal without spilling far past it.</p>
+    <p class="small">Models in the menu: <b>v3 epoch 11 · 50 steps</b> (recommended), <b>v3 epoch 11 · 100 steps</b> (with the noise-to-fruit frames; note the smaller fruits), <b>v3 epoch 7 · 50 steps</b> (also with frames; note the oversized fruits). Same fruits in each, so you can switch and compare.</p>
     <div class="viewer">
       <div class="list" id="list" role="listbox" aria-label="Fruits"></div>
       <div class="stage">
