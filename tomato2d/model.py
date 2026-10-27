@@ -7,6 +7,9 @@ Fruits whose ripeness is unknown (pseudo-labels from another camera) carry label
 classifier only learns "some fruit class, not background" (log of the summed fruit probabilities), the box
 regression uses the predicted fruit class and the mask loss is averaged over all fruit-class mask channels.
 With no such labels both losses equal torchvision's.
+
+CLASS_WEIGHT (set by tomato2d/train.py --balance) optionally weights the classification loss of known labels per
+class (index 0 = background), so rare ripeness classes count more.
 """
 import torch
 import torch.nn.functional as F
@@ -17,6 +20,8 @@ from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 from torchvision.models.detection.keypoint_rcnn import KeypointRCNNHeads, KeypointRCNNPredictor
 from torchvision.ops import MultiScaleRoIAlign
 
+CLASS_WEIGHT = None  # (num_classes + 1,) tensor or None
+
 
 def fastrcnn_loss(class_logits, box_regression, labels, regression_targets):
     labels = torch.cat(labels, dim=0)
@@ -25,6 +30,8 @@ def fastrcnn_loss(class_logits, box_regression, labels, regression_targets):
     unknown = labels >= K
     logp = F.log_softmax(class_logits.float(), 1)
     known_nll = -logp.gather(1, labels.clamp(max=K - 1)[:, None])[:, 0]
+    if CLASS_WEIGHT is not None:
+        known_nll = known_nll * CLASS_WEIGHT.to(known_nll.device)[labels.clamp(max=K - 1)]
     classification_loss = torch.where(unknown, -torch.logsumexp(logp[:, 1:], 1), known_nll).mean()
 
     pos = torch.where(labels > 0)[0]

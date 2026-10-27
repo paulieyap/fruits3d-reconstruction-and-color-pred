@@ -1,11 +1,13 @@
 """Train the tomato mask + width-keypoint model on TomatoMAP-Seg (prepared by tomato2d/prepare.py).
 
   python3 -m tomato2d.train DATA_DIR OUT_DIR [--epochs 40] [--batch-size 4] [--max-iters N]
-                            [--extra DIR ...] [--init CKPT]
+                            [--extra DIR ...] [--init CKPT] [--balance 0.5]
 
 --extra adds the train split of another prepared set (e.g. tomato2d/prepare_views.py pseudo-labels) and scores its
 val split too; --init starts from a checkpoint (fine-tuning) instead of COCO weights. All sets are trained under the
 first set's classes: a label of another set that is not among them counts as ripeness unknown.
+--balance P counters class imbalance twice, each with weight (n_most_common / n_class)^P per class: images are
+drawn with the weight of their rarest known label, and the classification loss of known labels is weighted.
 
 Writes OUT_DIR/last.pt, OUT_DIR/best.pt (best val AP@0.5, averaged over the val sets) and OUT_DIR/metrics.csv
 (one row per evaluation; columns of an extra val set are prefixed x1_, x2_, ...).
@@ -18,11 +20,26 @@ import time
 
 import click
 import torch
-from torch.utils.data import ConcatDataset, DataLoader
+from torch.utils.data import ConcatDataset, DataLoader, WeightedRandomSampler
 
 from tomato2d.data import TomatoSeg, collate
 from tomato2d.metrics import evaluate
+from tomato2d import model as model_lib
 from tomato2d.model import build_model, model_targets
+
+
+def class_balance(train_sets, n_classes, power):
+    """Image sampler and per-class loss weights (index 0 = background) from the known-label counts."""
+    img_labels = [[ds.classes.index(x['label']) + 1 for x in im['instances'] if x['label'] in ds.classes]
+                  for ds in train_sets for im in ds.images]
+    count = torch.zeros(n_classes + 1)
+    for ls in img_labels:
+        for l in ls:
+            count[l] += 1
+    w = torch.ones(n_classes + 1)
+    w[1:] = (count[1:].max() / count[1:].clamp(min=1)) ** power
+    img_w = [max((float(w[l]) for l in ls), default=1.0) for ls in img_labels]
+    return WeightedRandomSampler(img_w, len(img_w), replacement=True), w
 
 
 @click.command()
@@ -37,7 +54,8 @@ from tomato2d.model import build_model, model_targets
 @click.option('--seed', default=0)
 @click.option('--extra', multiple=True, help='another prepared data dir to train and validate on')
 @click.option('--init', default=None, help='checkpoint to start from')
-def main(data, out, epochs, batch_size, lr, eval_every, workers, max_iters, seed, extra, init):
+@click.option('--balance', default=0.0, help='class balancing power (0 = off), see above')
+def main(data, out, epochs, batch_size, lr, eval_every, workers, max_iters, seed, extra, init, balance):
     torch.manual_seed(seed)
     os.makedirs(out, exist_ok=True)
     dev = 'cuda'
@@ -46,8 +64,12 @@ def main(data, out, epochs, batch_size, lr, eval_every, workers, max_iters, seed
     vals = [('', TomatoSeg(data, 'val'))] + [(f'x{i + 1}_', TomatoSeg(d, 'val', classes=classes))
                                              for i, d in enumerate(extra)]
     train_ds = ConcatDataset(train_sets)
-    loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=workers, collate_fn=collate,
-                        persistent_workers=workers > 0, drop_last=True)
+    sampler = None
+    if balance:
+        sampler, model_lib.CLASS_WEIGHT = class_balance(train_sets, len(classes), balance)
+        print(f'class weights {[round(float(w), 2) for w in model_lib.CLASS_WEIGHT[1:]]}', flush=True)
+    loader = DataLoader(train_ds, batch_size=batch_size, shuffle=sampler is None, sampler=sampler, num_workers=workers,
+                        collate_fn=collate, persistent_workers=workers > 0, drop_last=True)
     model = build_model(num_classes=len(classes), pretrained=init is None).to(dev)
     if init:  # class-specific layers are skipped when the class count differs
         own = model.state_dict()
@@ -102,7 +124,7 @@ def main(data, out, epochs, batch_size, lr, eval_every, workers, max_iters, seed
             row.update({k: round(v / n, 4) for k, v in run.items()})
             rows.append(row)
             score = sum(m['ap50'] for m in ms.values()) / len(ms)
-            ck = {'model': model.state_dict(), 'classes': classes, 'epoch': ep + 1, 'val': ms[''],
+            ck = {'model': model.state_dict(), 'classes': classes, 'epoch': ep + 1, 'balance': balance, 'val': ms[''],
                   'val_extra': {pre: m for pre, m in ms.items() if pre}}
             torch.save(ck, os.path.join(out, 'last.pt'))
             if score > best:
