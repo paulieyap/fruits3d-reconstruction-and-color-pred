@@ -282,16 +282,17 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
     return `<div class="figure"><h3>${title}</h3>${s}</svg><span class="cap" style="display:flex;gap:14px;flex-wrap:wrap">${leg}${opts.cap ? ' · ' + opts.cap : ''}</span></div>`;
   }
   const RUNS = D.curves || {};
-  const runCol = { v1: css('--input'), v2: css('--accent') };
+  const runCol = { v1: css('--input'), v2: css('--accent'), v3: css('--gt') };
   const ema = (pts, a = 0.9) => { let m = null; return pts.map(p => [p[0], m = m === null ? p[1] : a * m + (1 - a) * p[1]]); };
   const byStep = (C, tag) => (C[tag] || []).map(r => [r[0], r[2]]);
   const byEpoch = (C, tag) => (C[tag] || []).filter(r => r[1] !== null).map(r => [r[1] + 1, r[2]]);
-  const lossName = { v1: 'v1 · ε-prediction loss', v2: 'v2 · v-prediction loss' };
+  const lossName = { v1: 'v1 · ε-prediction loss', v2: 'v2 · v-prediction loss', v3: 'v3 · v-prediction loss (EMA, cosine LR)' };
   const figs = Object.entries(RUNS).map(([run, C]) => {
     const lx = byStep(C, 'train/loss_xyz'), lr = byStep(C, 'train/loss_rgb');
     return line(lossName[run] || run, [{ name: 'xyz', color: css('--accent'), pts: ema(lx), raw: lx }, { name: 'rgb (seen points)', color: css('--gt'), pts: ema(lr), raw: lr }], { xlabel: 'step', clipq: 0.98, cap: 'smoothed, raw faint' });
   });
   const vs = (tag) => Object.entries(RUNS).map(([run, C]) => ({ name: run, color: runCol[run] || css('--muted'), pts: byEpoch(C, tag) })).filter(x => x.pts.length);
+  if (vs('val/cd_mm').length) figs.push(line('Validation Chamfer, 48 fruits (mm)', vs('val/cd_mm'), { xlabel: 'epoch', cap: '50 steps, w = 1, EMA weights' }));
   figs.push(line('Validation Chamfer, one fruit (m)', vs('val/cd_mean_epoch'), { xlabel: 'epoch' }));
   figs.push(line('Validation F-score, one fruit', vs('val/fscore_epoch'), { xlabel: 'epoch' }));
   $('curves').innerHTML = figs.join('');
@@ -340,7 +341,7 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
   const samples = (D.samples || []).map(s => ({ ...s, _inp: dec16(s.inp), _rgb: dec8(s.inp_rgb), _pred: dec16(s.pred), _oth: dec16(s.other), _traj: (s.traj || []).map(dec16) }));
   let frame = -1, playTimer = null; // -1 = final completion
   const evs = [...new Set(samples.map(s => s.ev))];
-  const evLabel = ev => { const su = (D.evals[ev] || {}).summary || {}, m = ev.match(/^(v\d+)_epoch_(\d+)/); return `${m ? m[1] + ' epoch ' + +m[2] : ev} · ${su.T ?? '?'} steps · w ${su.s ?? '?'}`; };
+  const evLabel = ev => { const su = (D.evals[ev] || {}).summary || {}, m = ev.match(/^(v\d+)_(?:best_)?epoch_(\d+)/); return `${m ? m[1] + ' epoch ' + +m[2] : ev} · ${su.T ?? '?'} steps · w ${su.s ?? '?'}`; };
   let model = evs[0];
   if (evs.length > 1) {
     $('f-model').innerHTML = evs.map(e => `<option value="${e}">${evLabel(e)}</option>`).join('');

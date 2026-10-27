@@ -1,6 +1,6 @@
 """Fill page_template.html with page_data.json (+ run status) -> a self-contained HTML page.
 
-  python3 build_page.py page_data.json status.json out.html
+  python3 build_page.py page_data.json status.json out.html [template, default page_template.html]
 status.json: {"state": "running"|"done", "epoch": int, "max_epoch": int, "updated": str, "commit": str}
 """
 import json, os, sys
@@ -15,6 +15,7 @@ code/fruits3d/                   repo, branch harvester-pcdiff
 # whole pipeline (re-runnable, skips finished stages), in tmux:
 tmux new -s paulie-harvester 'bash code/fruits3d/harvester/run_all.sh 2>&1 | tee -a runs/harvester_v1/run_all.log'      # v1 (epsilon)
 mkdir -p runs/harvester_v2; tmux new -s paulie-harvester-v2 'bash code/fruits3d/harvester/run_v2.sh 2>&1 | tee -a runs/harvester_v2/run_v2.log'   # v2 (v-prediction) + evals
+mkdir -p runs/harvester_v3; tmux new -s paulie-harvester-v3 'bash code/fruits3d/harvester/run_v3.sh 2>&1 | tee -a runs/harvester_v3/run_v3.log'   # v3 (v2 + EMA, cosine LR, best-by-Chamfer) + evals
 
 # TensorBoard
 docker run --rm -p 6006:6006 -v $PWD/runs:/r pcdiff:cu128 tensorboard --logdir_spec v1:/r/harvester_v1,v2:/r/harvester_v2 --bind_all
@@ -31,7 +32,8 @@ def main():
     data = json.load(open(sys.argv[1]))
     data['status'] = json.load(open(sys.argv[2]))
     data['repro'] = REPRO
-    tpl = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'page_template.html')).read()
+    tpl_name = sys.argv[4] if len(sys.argv) > 4 else 'page_template.html'
+    tpl = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), tpl_name)).read()
     blob = json.dumps(data, separators=(',', ':')).replace('</', '<\\/')
     open(sys.argv[3], 'w').write(tpl.replace('/*__DATA__*/', blob))
     print(sys.argv[3], os.path.getsize(sys.argv[3]) // 1024, 'KB')
