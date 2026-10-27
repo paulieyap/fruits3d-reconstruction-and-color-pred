@@ -318,7 +318,7 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
         h += '</tr>';
       });
     });
-    $('eval-tbl').innerHTML = h + `</tbody></table><p style="font-size:13px;color:var(--muted);margin-top:6px">n = ${E[names[0]].summary.syn?.n ?? 0} synthetic, ${E[names[0]].summary.real?.n ?? 0} real fruits per checkpoint. Green = better of the two methods.</p>`;
+    $('eval-tbl').innerHTML = h + `</tbody></table><p style="font-size:13px;color:var(--muted);margin-top:6px">n = ${[...new Set(names.map(n => E[n].summary.syn?.n ?? 0))].sort((a, b) => a - b).join(' or ')} synthetic, ${E[names[0]].summary.real?.n ?? 0} real fruits per checkpoint. Green = better of the two methods.</p>`;
   }
 
   // checkpoint / sampler scan
