@@ -110,103 +110,83 @@ canvas#pc { width: 100%; height: 480px; background: var(--panel); border: 1px so
 ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 6px; max-width: 72ch; }
 pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 12px; overflow-x: auto; margin: 0; font: 12.5px/1.5 var(--mono); }
 .empty { color: var(--muted); font-size: 14px; padding: 18px; border: 1px dashed var(--rule); border-radius: 6px; }
+details { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 16px; min-width: 0; }
+details[open] { display: grid; gap: 14px; }
+details > summary { cursor: pointer; font: 600 16px var(--display); }
+.small { font-size: 13px; color: var(--muted); }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 20px; }
+.gloss { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px 24px; }
+.gloss dt { font-weight: 600; }
+.gloss dd { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+.answer .big { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.answer .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 14px; display: grid; gap: 4px; }
+.answer .card .v { font: 700 30px/1 var(--display); font-variant-numeric: tabular-nums; }
+.answer .card .k { font-size: 13px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
 
 <div class="wrap">
   <header>
-    <span class="eyebrow">pcdiff · harvester 003 · k-ws5090-01</span>
-    <h1>v3: averaged weights, and checkpoints picked by Chamfer</h1>
-    <p>v2 sampled worse the longer it trained, and its in-training check was too noisy to notice. v3 is the same v-prediction model and data with three changes: an exponential moving average of the weights (decay 0.999) is used for sampling, the learning rate decays on a cosine to 1/100 over 40 epochs, and every 2 epochs the EMA weights complete 48 fixed val fruits with the evaluation sampler (50 steps, w = 1), keeping the 3 best checkpoints by Chamfer. Same task as before: predict the whole tomato from one wrist stereo view, XYZ only. v2 is shown alongside for comparison; its full story is on the v1/v2 page.</p>
+    <span class="eyebrow">Tomato shape completion · harvester 003 · model v3</span>
+    <h1>Guessing the back of a tomato from one camera view</h1>
+    <p>The harvester's wrist camera only sees the front of each tomato. This model takes those visible 3D points and fills in the rest of the fruit, so we can estimate its full shape and size. This page shows how well the third version (v3) does it, and which saved version of it to use.</p>
     <div class="chips" id="chips"></div>
   </header>
 
-  <section>
-    <span class="eyebrow">Pipeline</span>
-    <h2>From execution snapshots to a completion model</h2>
-    <div class="steps">
-      <div class="step"><b>1 · extract</b><h3>Snapshot mcap → RGB-D views</h3><p>Wrist + stacker ZED colour, RVL-compressed depth, confidence and the TF chain to the world frame, one frame per camera per snapshot.</p></div>
-      <div class="step"><b>2 · segment</b><h3>SAM 3, prompt "tomato"</h3><p>Zero-shot instance masks. Fruits cut by the border, under 1500 px or with too little valid depth are dropped.</p></div>
-      <div class="step"><b>3 · ground truth</b><h3>Procedural tomato at the real fruit</h3><p>The back is never observed, so a lobed, stem-up spheroid is placed at the sphere fit of each real fruit and ray-cast through its real mask from the real camera, with ZED-like noise.</p></div>
-      <div class="step"><b>4 · train + test</b><h3>pcdiff, partial-centred</h3><p>Trained on the procedural GT. Tested on real wrist views against the stacker camera's view of the same fruit.</p></div>
-    </div>
-  </section>
-
-  <section id="data-sec">
-    <span class="eyebrow">Dataset</span>
-    <h2>What went in</h2>
-    <div class="stats" id="ds-stats"></div>
-    <div id="overlays" class="grid2"></div>
-    <div class="grid2">
-      <div class="figure"><h3>Fitted fruit radius</h3><div id="h-r"></div><span class="cap">Sphere fit on each real partial (mm). The procedural GT is scaled to this ±10 %.</span></div>
-      <div class="figure"><h3>Distance from camera</h3><div id="h-d"></div><span class="cap">Median depth of each fruit's points (m).</span></div>
-    </div>
+  <section class="answer">
+    <span class="eyebrow">Short answer</span>
+    <h2>What we found</h2>
+    <!--FILL:answer-->
   </section>
 
   <section>
-    <span class="eyebrow">Training · TensorBoard scalars</span>
-    <h2>Training curves</h2>
-    <div class="grid2" id="curves"></div>
-    <p class="cap" style="color:var(--muted);font-size:13px">Validation runs the full denoising loop on one fixed val fruit per epoch, so its curves are noisy and only show training health. The evaluation below uses hundreds of fruits.</p>
+    <span class="eyebrow">How to read the numbers</span>
+    <h2>Five terms used on this page</h2>
+    <dl class="gloss">
+      <div><dt>Shape error (mm)</dt><dd>On synthetic fruits, where we know the true full shape: the average distance between the predicted surface and the true one ("Chamfer distance"). Lower is better. A tomato here is about 50 mm across.</dd></div>
+      <div><dt>Size error (%)</dt><dd>How much bigger (+) or smaller (−) the predicted fruit's volume is than the true one. Near 0 is best. A model can have a low shape error and still be the wrong size.</dd></div>
+      <div><dt>Hidden-side error (mm)</dt><dd>On real fruits we never see the back. A second camera (the stacker camera) sees about 30° further around the side. We check how far those extra points are from the prediction. Lower is better. It does not punish predictions that are too big.</dd></div>
+      <div><dt>Epoch / checkpoint</dt><dd>Training runs in rounds called epochs (1000 batches each). The model is saved at chosen epochs; each saved copy is a checkpoint. Later is not automatically better.</dd></div>
+      <div><dt>Steps</dt><dd>The model starts from random points and cleans them up step by step until they form a fruit. We tried 50 and 100 steps.</dd></div>
+    </dl>
+    <p class="small">Baseline everywhere: a sphere fitted to the visible points. If the model can't beat a ball, it isn't useful.</p>
   </section>
 
   <section>
-    <span class="eyebrow">Evaluation</span>
-    <h2>DDPM against a sphere fitted to the same view</h2>
-    <div class="tbl" id="eval-tbl"></div>
-    <ul class="plain" id="eval-notes">
-      <li><b>Synthetic val</b>: held-out snapshots, procedural GT. Chamfer (mean of both directions), F-score at 2.5 and 5 mm, convex-hull volume error.</li>
-      <li><b>Real val</b>: the stacker camera sees the same fruit from about 30° to the side. Its points that lie more than 3 mm from every wrist point are surface the wrist view never saw. "Unseen ≤5 mm" is the share of those points within 5 mm of the completion.</li>
-      <li><b>Caveat</b>: the real metric only checks that surface the stacker saw is covered by the completion, not the other way round, so an oversized completion is not penalised. This matters for v3: its best-Chamfer checkpoint (epoch 7) makes completions about 40% too large in volume on synthetic data (≈ 12% in radius), and on real fruits its volumes are as large as v2 epoch 4's (135–139 ml against 92 ml at v3 epoch 11).</li>
-      <li>Values are medians over fruits.</li>
-    </ul>
+    <span class="eyebrow">Which checkpoint</span>
+    <h2>Error and size over training</h2>
+    <!--FILL:overfit-->
+    <div class="charts" id="epoch-charts"></div>
   </section>
 
   <section>
-    <span class="eyebrow">Checkpoints</span>
-    <h2>Better shape early, steadier late</h2>
-    <p>Full evaluation, 50 steps, w = 1 (300 synthetic and 157 real val fruits for v3; 100 synthetic for v2):</p>
-    <div class="tbl"><table><thead><tr><th>model</th><th>syn Chamfer mm</th><th>syn F@5 %</th><th>syn volume err %</th><th>real: unseen median mm</th><th>real: unseen ≤5 mm %</th><th>real volume ml</th></tr></thead><tbody>
-      <tr><td>v3 epoch 7 (best val)</td><td class="win">2.16</td><td class="win">90.5</td><td>+39</td><td>2.35</td><td>82</td><td>139</td></tr>
-      <tr><td>v3 epoch 9</td><td>2.31</td><td>88.4</td><td>+17</td><td>2.01</td><td>86</td><td>109</td></tr>
-      <tr><td>v3 epoch 11</td><td>2.53</td><td>84.5</td><td class="win">+4</td><td>2.03</td><td class="win">87</td><td>92</td></tr>
-      <tr><td>v3 epoch 19</td><td>3.07</td><td>77.8</td><td>−3</td><td>2.16</td><td>83</td><td>79</td></tr>
-      <tr><td>v3 epoch 29</td><td>3.30</td><td>75.4</td><td>−7</td><td>2.56</td><td>80</td><td>66</td></tr>
-      <tr><td>v3 epoch 39 (last)</td><td>3.18</td><td>76.5</td><td>−5</td><td>2.49</td><td>78</td><td>66</td></tr>
-      <tr><td>v2 epoch 4</td><td>2.80</td><td>80.9</td><td>+12</td><td>1.89</td><td>84</td><td>133</td></tr>
-      <tr><td>v2 epoch 59 (last)</td><td>4.05</td><td>68.8</td><td>−13</td><td>2.75</td><td>75</td><td>60</td></tr>
-      <tr><td>sphere fit</td><td>3.46</td><td>73.6</td><td>−29</td><td>4.58</td><td>56</td><td>57</td></tr>
-    </tbody></table></div>
-    <ul class="plain">
-      <li><b>Synthetic shape improved.</b> v3's best checkpoint reaches 2.16 mm Chamfer against 2.80 for v2's best, and 90% of points within 5 mm against 81%.</li>
-      <li><b>Late training no longer collapses.</b> v3 still drifts from 2.2 to about 3.2 mm, and completions still shrink from oversize to slightly small, but its last epoch beats v2's last (4.05 mm) and the sphere fit. The 48-fruit validation curve now tracks this, so checkpoint selection works.</li>
-      <li><b>Size is the trade-off.</b> The lowest Chamfer comes with completions that are too large. Epoch 11 is the balanced pick: +4% volume on synthetic data, 2.03 mm and 87% within 5 mm on the real unseen side, still better than v2 epoch 4 on synthetic Chamfer.</li>
-      <li><b>Real fruits:</b> v3 does not beat v2 epoch 4's 1.89 mm unseen median, but that metric rewards oversize. Among checkpoints with roughly the right size, v3 epochs 9–19 (2.0–2.2 mm) are close to v2 epoch 19 (1.69 mm, −7%).</li>
-    </ul>
-    <div id="scan-tbl" hidden></div>
-    <p style="font-size:13px;color:var(--muted)">Pick in the 3D viewer below: v3 epoch 7 (with the denoising strip), v3 epoch 11, and v2 epoch 4.</p>
+    <span class="eyebrow">50 vs 100 steps</span>
+    <h2>Does more cleaning-up help?</h2>
+    <!--FILL:steps-->
+    <div class="tbl" id="steps-tbl"></div>
   </section>
 
   <section>
-    <span class="eyebrow">Point clouds</span>
-    <h2>Look at the completions</h2>
+    <span class="eyebrow">Look at the results</span>
+    <h2>3D viewer</h2>
+    <p>Pick a model and a fruit on the left. Drag to rotate. <span style="color:var(--input)">Real-colour points</span> are what the wrist camera saw (the input). <span style="color:var(--accent)">Red points</span> are the model's completed fruit. <span style="color:var(--gt)">Teal points</span> are what we check against: on real fruits the stacker camera's view, on synthetic fruits the true full shape. Good results: red covers the teal without spilling far past it.</p>
     <div class="viewer">
-      <div class="list" id="list" role="listbox" aria-label="Samples"></div>
+      <div class="list" id="list" role="listbox" aria-label="Fruits"></div>
       <div class="stage">
         <div class="controls">
-          <select id="f-model" aria-label="Model and sampler shown" hidden></select>
-          <span class="seg" role="group" aria-label="Sample set"><button id="f-real" aria-pressed="true">real</button><button id="f-syn" aria-pressed="false">synthetic</button></span>
-          <label><input type="checkbox" id="t-inp" checked> <span class="sw" style="background:var(--input)"></span> input view (real colour)</label>
-          <label><input type="checkbox" id="t-pred" checked> <span class="sw" style="background:var(--accent)"></span> completion</label>
-          <label><input type="checkbox" id="t-oth" checked> <span class="sw" style="background:var(--gt)"></span> <span id="oth-name">stacker view (held out)</span></label>
+          <select id="f-model" aria-label="Model shown" hidden></select>
+          <span class="seg" role="group" aria-label="Fruit set"><button id="f-real" aria-pressed="true">real</button><button id="f-syn" aria-pressed="false">synthetic</button></span>
+          <label><input type="checkbox" id="t-inp" checked> <span class="sw" style="background:var(--input)"></span> camera input</label>
+          <label><input type="checkbox" id="t-pred" checked> <span class="sw" style="background:var(--accent)"></span> prediction</label>
+          <label><input type="checkbox" id="t-oth" checked> <span class="sw" style="background:var(--gt)"></span> <span id="oth-name">stacker view (check)</span></label>
           <label><input type="checkbox" id="t-spin" checked> spin</label>
         </div>
         <canvas id="pc" aria-label="3D point cloud, drag to rotate"></canvas>
         <div class="traj" id="traj" hidden>
-          <div class="row"><b>Denoising</b><button class="play" id="tr-play">play</button>
-            <input type="range" id="tr-step" min="0" max="5" step="1" aria-label="Denoising step shown in the main view"><span id="tr-lab" class="tag"></span></div>
+          <div class="row"><b>From noise to fruit</b><button class="play" id="tr-play">play</button>
+            <input type="range" id="tr-step" min="0" max="5" step="1" aria-label="Step shown in the main view"><span id="tr-lab" class="tag"></span></div>
           <div class="strip" id="strip"></div>
-          <p style="font-size:13px;color:var(--muted);margin:0">The sampler starts from Gaussian noise and runs 50 or 100 DPM-Solver steps (pick the model above); shown is the sample after every 10th step (t is the noise level on the 1000-step training schedule). Panels are 120 mm across with the input faded, the main view 75 mm. The last panel is the completion above, on a 1000-point subset. With this linear noise schedule the noise level stays high for most steps, so the fruit only takes shape near the end.</p>
+          <p class="small">Each panel is the prediction after another 10 steps, starting from random points on the left. Click one to show it above. The shape only appears in the last few panels.</p>
         </div>
         <div class="meta"><div class="kv" id="kv"></div><img id="crop" alt="Wrist camera crop of the selected tomato" hidden></div>
       </div>
@@ -214,31 +194,64 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
   </section>
 
   <section>
+    <span class="eyebrow">How it works</span>
+    <h2>From harvester recordings to a model</h2>
+    <div class="steps">
+      <div class="step"><b>1</b><h3>Collect views</h3><p>From the harvester's recordings we take the wrist and stacker camera images, their depth, and where each camera was.</p></div>
+      <div class="step"><b>2</b><h3>Find tomatoes</h3><p>SAM 3 outlines every tomato in the images. Tomatoes cut off by the image edge or too small are skipped.</p></div>
+      <div class="step"><b>3</b><h3>Make training answers</h3><p>We never see a real tomato's back, so for training we place a realistic synthetic tomato where each real one is and render what the camera would see.</p></div>
+      <div class="step"><b>4</b><h3>Train and test</h3><p>The model learns to go from the visible part to the full synthetic shape, and is then tested on real wrist views.</p></div>
+    </div>
+  </section>
+
+  <section>
     <span class="eyebrow">What changed from v2</span>
-    <h2>Three changes, same model and data</h2>
+    <h2>Three fixes</h2>
+    <p>v2 got worse the longer it trained, and its built-in check was too noisy to notice. v3 keeps the same model and data with three changes:</p>
     <ul class="plain">
-      <li><b>EMA weights.</b> A running average of the weights (decay 0.999, about the last 1000 steps) is kept next to the trained ones and used for validation and evaluation. It smooths out the step-to-step noise that made v2's sampled size wander.</li>
-      <li><b>Cosine learning rate.</b> From 1·10⁻⁴ down to 1·10⁻⁶ over 40 epochs, instead of constant, so late epochs make small updates.</li>
-      <li><b>Validation that matches the evaluation.</b> 48 fixed val fruits sampled with 50 steps and w = 1 every 2 epochs (v2: 8 fruits, 1000 steps, w = 2). The 3 lowest-Chamfer checkpoints are kept (epochs 7, 9, 11), plus every 10th epoch.</li>
+      <li><b>Averaged weights.</b> Uses a running average of the model over its last ~1000 training batches ("EMA"), which smooths out batch-to-batch jumps.</li>
+      <li><b>Slowing down.</b> The learning rate shrinks gradually to 1/100 of its start by the last epoch, so late training makes only small changes.</li>
+      <li><b>A better built-in check.</b> Every 2 epochs it completes 48 fixed test fruits exactly as the final evaluation does, and keeps the 3 best checkpoints (epochs 7, 9 and 11), plus every 10th epoch.</li>
     </ul>
   </section>
 
-  <section>
-    <span class="eyebrow">Read before using the numbers</span>
-    <h2>Limits</h2>
-    <ul class="plain">
-      <li>The complete shapes are procedural. The model learns the occlusion, depth noise and colour of the real views, but its idea of the back side comes from the generator (spheroid, 0.72–0.97 height/width, up to 7 % lobing, stem dimple). There is no measured whole-fruit truth from the harvester yet.</li>
-      <li>The real held-out check only covers the side the stacker camera adds, not the true back.</li>
-      <li>The arm and stacker cameras disagree by about 9 cm in the TF tree (consistent per snapshot). Real pairs are aligned per snapshot by voting on fruit centres, then ICP; pairs without a consistent offset are skipped.</li>
-      <li>Training is per fruit. A truss is the set of its fruits' completions; peduncle and stems are not modelled.</li>
-    </ul>
-  </section>
+  <details>
+    <summary>All numbers (both methods, every checkpoint)</summary>
+    <div class="tbl" id="eval-tbl"></div>
+    <div id="eval-notes"></div>
+    <div id="scan-tbl" hidden></div>
+  </details>
 
-  <section>
-    <span class="eyebrow">Reproduce</span>
-    <h2>Where everything is</h2>
+  <details>
+    <summary>Training logs</summary>
+    <div class="grid2" id="curves"></div>
+    <p class="small">Training loss should go down; it does for every run. The 48-fruit check is the one used to pick checkpoints.</p>
+  </details>
+
+  <details id="data-sec">
+    <summary>The data</summary>
+    <div class="stats" id="ds-stats"></div>
+    <div id="overlays" class="grid2"></div>
+    <div class="grid2">
+      <div class="figure"><h3>Tomato radius</h3><div id="h-r"></div><span class="cap">From a sphere fit to each real fruit's visible points (mm). Synthetic tomatoes are scaled to match, ±10 %.</span></div>
+      <div class="figure"><h3>Distance from camera</h3><div id="h-d"></div><span class="cap">Middle distance of each fruit's points (m).</span></div>
+    </div>
+  </details>
+
+  <details>
+    <summary>Limits</summary>
+    <ul class="plain">
+      <li>The full shapes used for training are synthetic (a slightly squashed, lobed ball with a stem dip). The model's idea of the back comes from them. We have no measured whole-fruit shapes from the harvester yet.</li>
+      <li>The real-fruit check only covers the extra side the stacker camera sees, not the true back.</li>
+      <li>The wrist and stacker cameras' recorded positions disagree by about 9 cm; each pair is lined up by matching fruit centres, and pairs that don't line up are skipped.</li>
+      <li>Each fruit is completed on its own; stems and the truss stalk are not modelled.</li>
+    </ul>
+  </details>
+
+  <details>
+    <summary>Reproduce</summary>
     <pre id="repro"></pre>
-  </section>
+  </details>
 </div>
 
 <script id="page-data" type="application/json">/*__DATA__*/</script>
@@ -251,8 +264,8 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
 
   // header chips
   const st = D.status || {};
-  const chips = [[st.state === 'done' ? 'training finished' : `training · epoch ${st.epoch ?? '?'} / ${st.max_epoch ?? '?'}`, st.state === 'done' ? 'state-done' : 'state-run'],
-    [`updated ${st.updated || ''}`, ''], [`branch harvester-pcdiff · ${st.commit || ''}`, ''], [`3D view: ${[].concat(D.sample_ckpt || []).join(', ') || 'none yet'}`, '']];
+  const chips = [[st.state === 'done' ? `training finished · ${st.max_epoch} epochs` : `training · epoch ${st.epoch ?? '?'} / ${st.max_epoch ?? '?'}`, st.state === 'done' ? 'state-done' : 'state-run'],
+    [`updated ${st.updated || ''}`, ''], [`code: branch harvester-pcdiff · ${st.commit || ''}`, '']];
   $('chips').innerHTML = chips.map(([t, c]) => `<span class="chip ${c}">${t}</span>`).join('');
 
   // dataset
@@ -309,9 +322,8 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
     return line(lossName[run] || run, [{ name: 'xyz', color: css('--accent'), pts: ema(lx), raw: lx }, { name: 'rgb (seen points)', color: css('--gt'), pts: ema(lr), raw: lr }], { xlabel: 'step', clipq: 0.98, cap: 'smoothed, raw faint' });
   });
   const vs = (tag) => Object.entries(RUNS).map(([run, C]) => ({ name: run, color: runCol[run] || css('--muted'), pts: byEpoch(C, tag) })).filter(x => x.pts.length);
-  if (vs('val/cd_mm').length) figs.push(line('Validation Chamfer, 48 fruits (mm)', vs('val/cd_mm'), { xlabel: 'epoch', cap: '50 steps, w = 1, EMA weights' }));
-  figs.push(line('Validation Chamfer, one fruit (m)', vs('val/cd_mean_epoch'), { xlabel: 'epoch' }));
-  figs.push(line('Validation F-score, one fruit', vs('val/fscore_epoch'), { xlabel: 'epoch' }));
+  if (vs('val/cd_mm').length) figs.push(line('Built-in check: shape error on 48 fruits (mm)', vs('val/cd_mm'), { xlabel: 'epoch', cap: 'used to pick checkpoints' }));
+  if (vs('val/cd_mean_epoch').length) figs.push(line('Old check: shape error on 1 fruit (m)', vs('val/cd_mean_epoch'), { xlabel: 'epoch' }));
   $('curves').innerHTML = figs.join('');
 
   // eval table
@@ -319,14 +331,16 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
   const names = Object.keys(E).sort((a, b) => (a === 'last') - (b === 'last') || a.localeCompare(b, undefined, { numeric: true }));
   if (!names.length) { $('eval-tbl').innerHTML = '<div class="empty">Evaluation runs after training: v2 at epochs 10–60 and v1 at 10, 20 and 30 (with the centroid fix), each on 300 synthetic val fruits and every real val pair.</div>'; }
   else {
-    const cols = [['syn', 'cd_mm', 'Chamfer mm', 2, 'low'], ['syn', 'f2.5', 'F@2.5 mm', 1, 'high'], ['syn', 'f5', 'F@5 mm', 1, 'high'], ['syn', 'vol_err_pct', 'volume err %', 1, 'abs'],
-      ['real', 'unseen_med_mm', 'real: unseen median mm', 2, 'low'], ['real', 'unseen_in5mm_pct', 'real: unseen ≤5 mm %', 1, 'high']];
-    let h = '<table><thead><tr><th>checkpoint</th><th>method</th>' + cols.map(c => `<th>${c[2]}</th>`).join('') + '</tr></thead><tbody>';
+    const cols = [['syn', 'cd_mm', 'shape error mm', 2, 'low'], ['syn', 'f5', 'points within 5 mm %', 1, 'high'], ['syn', 'vol_err_pct', 'size error %', 1, 'abs'],
+      ['real', 'unseen_med_mm', 'real: hidden-side error mm', 2, 'low'], ['real', 'unseen_in5mm_pct', 'real: hidden side within 5 mm %', 1, 'high']];
+    let h = '<table><thead><tr><th>checkpoint</th><th>fruits</th><th>steps</th><th>method</th>' + cols.map(c => `<th>${c[2]}</th>`).join('') + '</tr></thead><tbody>';
     names.forEach(n => {
       const S = E[n].summary;
+      if (S.s && S.s !== 1) return;
       if (!S.real && !S.syn) return;
       ['ddpm', 'sphere'].forEach(m => {
-        h += `<tr><td>${m === 'ddpm' ? n.replace('harvester_v1_', 'v1_').replace(/_/g, ' ').replace('x0fix300', '+ centroid fix') : ''}</td><td>${m === 'ddpm' ? 'pcdiff' : 'sphere fit'}</td>`;
+        const P = parseEv(n, S);
+        h += `<tr><td>${m === 'ddpm' ? (P ? P.ver + ' epoch ' + P.epoch : n) : ''}</td><td>${m === 'ddpm' ? (P?.split === 'train' ? 'training' : 'test') : ''}</td><td>${m === 'ddpm' ? S.T : ''}</td><td>${m === 'ddpm' ? 'model' : 'sphere fit'}</td>`;
         cols.forEach(([k, key, , d, better]) => {
           const v = S[k]?.[`${m}_${key}`], o = S[k]?.[`${m === 'ddpm' ? 'sphere' : 'ddpm'}_${key}`];
           let win = false; if (v !== undefined && o !== undefined) win = better === 'low' ? v < o : better === 'high' ? v > o : Math.abs(v) < Math.abs(o);
@@ -335,7 +349,7 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
         h += '</tr>';
       });
     });
-    $('eval-tbl').innerHTML = h + `</tbody></table><p style="font-size:13px;color:var(--muted);margin-top:6px">n = ${[...new Set(names.map(n => E[n].summary.syn?.n ?? 0))].sort((a, b) => a - b).join(' or ')} synthetic, ${E[names[0]].summary.real?.n ?? 0} real fruits per checkpoint. Green = better of the two methods.</p>`;
+    $('eval-tbl').innerHTML = h + `</tbody></table><p style="font-size:13px;color:var(--muted);margin-top:6px">n = ${[...new Set(names.map(n => E[n].summary.syn?.n ?? 0))].sort((a, b) => a - b).join(' or ')} synthetic, ${E[names[0]].summary.real?.n ?? 0} real fruits per checkpoint. Green = better than the sphere fit. "Training" rows use fruits the model learned from; "test" rows use fruits it never saw.</p>`;
   }
 
   // checkpoint / sampler scan
@@ -352,13 +366,75 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
     }
   }
 
+  // eval name -> {split, ver, epoch}; steps and w come from the summary
+  function parseEv(n, S) {
+    const m = n.match(/^(train_)?(v\d+)_(?:best_)?epoch_(\d+)/);
+    return m ? { split: m[1] ? 'train' : 'test', ver: m[2], epoch: +m[3], T: S.T, w: S.s } : null;
+  }
+  const EV = {};  // key split|ver|T -> {epoch: summary}, the eval with most synthetic fruits wins
+  Object.entries(D.evals || {}).forEach(([n, e]) => {
+    const P = parseEv(n, e.summary); if (!P || P.w !== 1) return;
+    const k = `${P.split}|${P.ver}|${P.T}`, old = (EV[k] = EV[k] || {})[P.epoch];
+    if (!old || (e.summary.syn?.n ?? 0) > (old.syn?.n ?? 0)) EV[k][P.epoch] = e.summary;
+  });
+  const ser = (k, f) => Object.entries(EV[k] || {}).map(([ep, S]) => [+ep, f(S)]).filter(p => p[1] !== undefined).sort((a, b) => a[0] - b[0]);
+  function epochChart(title, series, opts) {
+    const W = 520, H = 250, L = 46, R = 14, T = 12, B = 30;
+    if (!series.some(s => s.pts.length)) return '';
+    const ys = series.flatMap(s => s.pts.map(p => p[1])).concat((opts.refs || []).map(r => r.y));
+    const x0 = 0, x1 = Math.max(...series.flatMap(s => s.pts.map(p => p[0]))) + 1;
+    let y0 = Math.min(...ys), y1 = Math.max(...ys); const pad = (y1 - y0) * 0.08 || 1; y0 -= pad; y1 += pad;
+    const X = x => L + (W - L - R) * (x - x0) / (x1 - x0), Y = y => T + (H - T - B) * (1 - (y - y0) / (y1 - y0));
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${title}">`;
+    for (let i = 0; i <= 4; i++) { const v = y0 + (y1 - y0) * i / 4; s += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="${css('--rule')}"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v.toFixed(opts.d ?? 1)}</text>`; }
+    for (let e = 0; e <= x1; e += 10) s += `<text x="${X(e)}" y="${H - 10}" text-anchor="middle">${e}</text>`;
+    s += `<text x="${W - R}" y="${H - 10}" text-anchor="end">epoch</text>`;
+    (opts.refs || []).forEach(r => { s += `<line x1="${L}" x2="${W - R}" y1="${Y(r.y)}" y2="${Y(r.y)}" stroke="${css('--muted')}" stroke-dasharray="4 4"/><text x="${W - R}" y="${Y(r.y) - 5}" text-anchor="end">${r.label}</text>`; });
+    series.forEach(sr => {
+      if (!sr.pts.length) return;
+      s += `<polyline fill="none" stroke="${sr.color}" stroke-width="2" ${sr.dash ? 'stroke-dasharray="6 4"' : ''} points="${sr.pts.map(p => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(' ')}"/>`;
+      sr.pts.forEach(p => { s += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3.5" fill="${sr.color}"><title>${sr.name}, epoch ${p[0]}: ${p[1].toFixed(opts.d ?? 1)}</title></circle>`; });
+    });
+    const leg = series.filter(sr => sr.pts.length).map(sr => `<span style="display:inline-flex;gap:6px;align-items:center"><span class="sw" style="background:${sr.color}${sr.dash ? ';outline:1px dashed ' + sr.color + ';outline-offset:2px' : ''}"></span>${sr.name}</span>`).join(' ');
+    return `<div class="figure"><h3>${title}</h3>${s}</svg><span class="cap" style="display:flex;gap:14px;flex-wrap:wrap">${leg}</span>${opts.cap ? `<span class="cap">${opts.cap}</span>` : ''}</div>`;
+  }
+  {
+    const sph = Object.values(EV['test|v3|50'] || {})[0]?.syn?.sphere_cd_mm;
+    const cd = S => S.syn?.ddpm_cd_mm, vol = S => S.syn?.ddpm_vol_err_pct, real = S => S.real?.ddpm_unseen_med_mm;
+    const lines = f => [
+      { name: 'v3 · test fruits', color: css('--accent'), pts: ser('test|v3|50', f) },
+      { name: 'v3 · training fruits', color: css('--gt'), pts: ser('train|v3|50', f) },
+      { name: 'v3 · test · 100 steps', color: css('--accent'), dash: true, pts: ser('test|v3|100', f) },
+      { name: 'v2 · test fruits', color: css('--input'), pts: ser('test|v2|50', f) },
+      { name: 'v2 · training fruits', color: css('--input'), dash: true, pts: ser('train|v2|50', f) }];
+    $('epoch-charts').innerHTML =
+      epochChart('Shape error, synthetic fruits (mm, lower is better)', lines(cd), { d: 1, refs: sph ? [{ y: sph, label: 'sphere fit' }] : [] }) +
+      epochChart('Size error, synthetic fruits (%, 0 is right)', lines(vol), { d: 0, refs: [{ y: 0, label: 'right size' }] }) +
+      epochChart('Hidden-side error, real fruits (mm, lower is better)', lines(real), { d: 1, cap: 'Does not punish predictions that are too big.' });
+  }
+  {
+    const A = EV['test|v3|50'] || {}, B2 = EV['test|v3|100'] || {};
+    const eps = Object.keys(B2).map(Number).sort((a, b) => a - b);
+    const c = (S, f, d) => S ? fmt(f(S), d) : '–';
+    const win = (a, b, f) => { if (!a || !b) return ['', '']; const ga = f(a) < f(b); return [ga ? 'win' : '', ga ? '' : 'win']; };
+    const rows = eps.map(e => {
+      const a = A[e], b = B2[e];
+      const cw = win(a, b, S => S.syn.ddpm_cd_mm), vw = win(a, b, S => Math.abs(S.syn.ddpm_vol_err_pct)), rw = win(a, b, S => S.real.ddpm_unseen_med_mm);
+      return `<tr><td>v3 epoch ${e}</td><td class="${cw[0]}">${c(a, S => S.syn.ddpm_cd_mm, 2)}</td><td class="${cw[1]}">${c(b, S => S.syn.ddpm_cd_mm, 2)}</td>` +
+        `<td class="${vw[0]}">${c(a, S => S.syn.ddpm_vol_err_pct, 0)}</td><td class="${vw[1]}">${c(b, S => S.syn.ddpm_vol_err_pct, 0)}</td>` +
+        `<td class="${rw[0]}">${c(a, S => S.real.ddpm_unseen_med_mm, 2)}</td><td class="${rw[1]}">${c(b, S => S.real.ddpm_unseen_med_mm, 2)}</td></tr>`;
+    }).join('');
+    $('steps-tbl').innerHTML = eps.length ? `<table><thead><tr><th rowspan="2">checkpoint</th><th colspan="2">shape error mm</th><th colspan="2">size error %</th><th colspan="2">real hidden-side mm</th></tr><tr><th>50 steps</th><th>100 steps</th><th>50 steps</th><th>100 steps</th><th>50 steps</th><th>100 steps</th></tr></thead><tbody>${rows}</tbody></table><p class="small">Green = the better of 50 and 100 steps for that checkpoint. Test fruits only.</p>` : '<div class="empty">100-step results are still running.</div>';
+  }
+
   // 3D viewer (canvas, orthographic, painter-sorted)
+
   const dec16 = (b) => { const s = atob(b), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return new Int16Array(u.buffer); };
   const dec8 = (b) => { const s = atob(b), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; };
   const samples = (D.samples || []).map(s => ({ ...s, _inp: dec16(s.inp), _rgb: dec8(s.inp_rgb), _pred: dec16(s.pred), _oth: dec16(s.other), _traj: (s.traj || []).map(dec16) }));
   let frame = -1, playTimer = null; // -1 = final completion
   const evs = [...new Set(samples.map(s => s.ev))];
-  const evLabel = ev => { const su = (D.evals[ev] || {}).summary || {}, m = ev.match(/^(v\d+)_(?:best_)?epoch_(\d+)/); return `${m ? m[1] + ' epoch ' + +m[2] : ev} · ${su.T ?? '?'} steps · w ${su.s ?? '?'}`; };
+  const evLabel = ev => { const su = (D.evals[ev] || {}).summary || {}, m = ev.match(/^(v\d+)_(?:best_)?epoch_(\d+)/); return `${m ? m[1] + ' epoch ' + +m[2] : ev} · ${su.T ?? '?'} steps`; };
   let model = evs[0];
   if (evs.length > 1) {
     $('f-model').innerHTML = evs.map(e => `<option value="${e}">${evLabel(e)}</option>`).join('');
@@ -370,10 +446,10 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
   function renderList(keepId) {
     const items = samples.filter(s => s.kind === kind && s.ev === model);
     $('f-real').setAttribute('aria-pressed', kind === 'real'); $('f-syn').setAttribute('aria-pressed', kind === 'syn');
-    $('oth-name').textContent = kind === 'real' ? 'stacker view (held out)' : 'complete ground truth';
+    $('oth-name').textContent = kind === 'real' ? 'stacker view (check)' : 'true full shape (check)';
     if (!items.length) { $('list').innerHTML = '<div class="empty">No evaluated samples yet. They appear after the first checkpoint evaluation.</div>'; cur = null; draw(); return; }
     $('list').innerHTML = items.map((s, i) => {
-      const m = s.metrics, line2 = s.kind === 'real' ? `unseen ${fmt(m.ddpm_unseen_med_mm)} mm · sphere ${fmt(m.sphere_unseen_med_mm)}` : `CD ${fmt(m.ddpm_cd_mm, 2)} · F5 ${fmt(m['ddpm_f5'])}`;
+      const m = s.metrics, line2 = s.kind === 'real' ? `hidden side ${fmt(m.ddpm_unseen_med_mm)} mm (sphere ${fmt(m.sphere_unseen_med_mm)})` : `shape ${fmt(m.ddpm_cd_mm, 2)} mm (sphere ${fmt(m.sphere_cd_mm, 2)})`;
       const th = s.crop ? `<img class="thumb" src="data:image/jpeg;base64,${s.crop}" alt="">` : `<span class="thumb"></span>`;
       return `<button role="option" data-id="${s.id}" aria-pressed="false">${th}<span><span class="tag">${s.id.slice(0, 15)}</span><br>${line2}</span></button>`;
     }).join('');
@@ -383,9 +459,9 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
   function select(id) {
     cur = samples.find(s => s.id === id && s.ev === model);
     $('list').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === id));
-    const m = cur.metrics, kv = [['sample', cur.id], ['input points', m.n_in], ['sphere radius', fmt(m.r_sphere_mm) + ' mm']];
-    if (cur.kind === 'real') kv.push(['unseen points', m.n_unseen], ['pcdiff unseen median', fmt(m.ddpm_unseen_med_mm, 2) + ' mm'], ['sphere unseen median', fmt(m.sphere_unseen_med_mm, 2) + ' mm'], ['pcdiff unseen ≤5 mm', fmt(m.ddpm_unseen_in5mm_pct) + ' %'], ['pcdiff hull volume', fmt(m.ddpm_vol_ml) + ' ml'], ['sphere volume', fmt(m.sphere_vol_ml) + ' ml']);
-    else kv.push(['pcdiff Chamfer', fmt(m.ddpm_cd_mm, 2) + ' mm'], ['sphere Chamfer', fmt(m.sphere_cd_mm, 2) + ' mm'], ['pcdiff F@5', fmt(m.ddpm_f5)], ['pcdiff volume err', fmt(m.ddpm_vol_err_pct) + ' %']);
+    const m = cur.metrics, kv = [['fruit', cur.id], ['visible points', m.n_in], ['sphere-fit radius', fmt(m.r_sphere_mm) + ' mm']];
+    if (cur.kind === 'real') kv.push(['hidden-side error, model', fmt(m.ddpm_unseen_med_mm, 2) + ' mm'], ['hidden-side error, sphere', fmt(m.sphere_unseen_med_mm, 2) + ' mm'], ['hidden side within 5 mm', fmt(m.ddpm_unseen_in5mm_pct) + ' %'], ['volume, model', fmt(m.ddpm_vol_ml) + ' ml'], ['volume, sphere', fmt(m.sphere_vol_ml) + ' ml']);
+    else kv.push(['shape error, model', fmt(m.ddpm_cd_mm, 2) + ' mm'], ['shape error, sphere', fmt(m.sphere_cd_mm, 2) + ' mm'], ['size error, model', fmt(m.ddpm_vol_err_pct) + ' %']);
     $('kv').innerHTML = kv.map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join('');
     setupTraj();
     if (cur.crop) { $('crop').src = 'data:image/jpeg;base64,' + cur.crop; $('crop').hidden = false; } else $('crop').hidden = true;
@@ -431,7 +507,7 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
     frame = -1;
     if (!n) return;
     $('tr-step').max = n - 1; $('tr-step').value = n - 1;
-    $('strip').innerHTML = cur.traj_step.map((st, k) => `<button aria-pressed="false" data-k="${k}"><canvas></canvas><span>${st ? 'step ' + st : 'noise'} · t=${cur.traj_t[k]}</span></button>`).join('');
+    $('strip').innerHTML = cur.traj_step.map((st, k) => `<button aria-pressed="false" data-k="${k}"><canvas></canvas><span>${st ? 'step ' + st : 'start'}</span></button>`).join('');
     $('strip').querySelectorAll('button').forEach(b => b.onclick = () => setFrame(+b.dataset.k));
     setFrame(n - 1, true);
   }
@@ -439,7 +515,7 @@ pre { background: var(--panel); border: 1px solid var(--rule); border-radius: 6p
     const n = cur._traj.length;
     frame = k === n - 1 ? -1 : k; // the last frame is the completion itself, shown with all points
     $('tr-step').value = k;
-    $('tr-lab').textContent = (cur.traj_step[k] ? `step ${cur.traj_step[k]} / ${cur.traj_step[cur.traj_step.length - 1]}` : 'initial noise') + ` · t=${cur.traj_t[k]}`;
+    $('tr-lab').textContent = cur.traj_step[k] ? `step ${cur.traj_step[k]} of ${cur.traj_step[cur.traj_step.length - 1]}` : 'start: random points';
     $('strip').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.k === k));
     if (!quiet) draw();
   }
